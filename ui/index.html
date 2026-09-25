@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Logisim Controller — Autonomous Circuit Control & Simulation</title>
+  <meta name="description" content="Intelligent desktop companion for Logisim 2.7.1 powered by Google Gemini. Autonomous circuit synthesis, instant keyboard automation, and mathematical pin poking.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="brand-group">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+            <line x1="8" y1="12" x2="4" y2="12"/>
+            <line x1="20" y1="12" x2="16" y2="12"/>
+            <line x1="12" y1="8" x2="12" y2="4"/>
+            <line x1="12" y1="20" x2="12" y2="16"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">AI Logisim Controller</h1>
+          <span class="badge version-badge">v1.0 • 2.7.1 Engine</span>
+        </div>
+      </div>
+
+      <!-- Center Status: Logisim Window Detection -->
+      <div class="window-status-pill" id="window-status-badge">
+        <span class="status-dot searching" id="status-dot"></span>
+        <span class="status-label" id="status-label">Detecting Logisim 2.7.1...</span>
+        <button class="btn-launch-pill hidden" id="btn-launch-logisim" title="Click to start Logisim 2.7.1">▶ Launch Logisim</button>
+        <button class="icon-btn refresh-btn" id="refresh-status-btn" title="Refresh Logisim Status">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M23 4v6h-6"/>
+            <path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Quick Simulation Controls & Settings -->
+      <div class="header-actions">
+        <div class="sim-quick-controls">
+          <button class="control-btn" id="btn-tick" title="Step simulation clock once (Ctrl+K)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"/>
+              <line x1="19" y1="5" x2="19" y2="19"/>
+            </svg>
+            <span>Tick</span>
+            <kbd>Ctrl+K</kbd>
+          </button>
+
+          <button class="control-btn" id="btn-clock" title="Toggle automatic clock ticking (Ctrl+T)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>Auto-Tick</span>
+            <kbd>Ctrl+T</kbd>
+          </button>
+
+          <button class="control-btn" id="btn-reset" title="Reset simulation state (Ctrl+R)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 2v6h6"/>
+              <path d="M21 12A9 9 0 0 0 6 5.3L3 8"/>
+            </svg>
+            <span>Reset</span>
+            <kbd>Ctrl+R</kbd>
+          </button>
+        </div>
+
+        <button class="settings-trigger-btn" id="open-settings-btn" title="Configure Gemini API Key & Model">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span id="model-tag-header">Gemini</span>
+          <span class="api-key-badge" id="api-key-badge">Set Key</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main class="main-layout">
+      <!-- Left Column: AI Conversation & Interaction -->
+      <section class="chat-section">
+        <!-- Suggested Quick Prompts -->
+        <div class="prompts-bar">
+          <span class="prompts-title">Try:</span>
+          <button class="prompt-chip" data-prompt="Build a 1-bit Full Adder with inputs A, B, Cin and test 1 + 1">Full Adder</button>
+          <button class="prompt-chip" data-prompt="Create a 2-to-1 Multiplexer and open it in Logisim">2:1 Mux</button>
+          <button class="prompt-chip" data-prompt="Build an SR Latch using NOR gates">SR Latch</button>
+          <button class="prompt-chip" data-prompt="Turn on input switch A and step the clock">Poke Switch A</button>
+          <button class="prompt-chip" data-prompt="Tick the clock 4 times">Tick Clock x4</button>
+        </div>
+
+        <!-- Chat Conversation Messages -->
+        <div class="chat-feed" id="chat-feed">
+          <!-- Welcome message -->
+          <div class="message-card assistant welcome-card">
+            <div class="msg-header">
+              <div class="avatar-ring">
+                <span class="avatar-text">AI</span>
+              </div>
+              <div class="msg-meta">
+                <span class="sender-name">AI Logisim Controller</span>
+                <span class="msg-timestamp">Active</span>
+              </div>
+            </div>
+            <div class="msg-body">
+              <p>Welcome! I can autonomously generate <strong>Logisim 2.7.1 circuits</strong>, reload them directly into your running window, toggle inputs using mathematical coordinates (no slow vision delays), and control clock simulations.</p>
+              <div class="feature-pills">
+                <span class="feature-pill">⚡ Instant .circ XML Generation</span>
+                <span class="feature-pill">🎯 Zero-Vision Coordinate Poking</span>
+                <span class="feature-pill">⏱ Keyboard Automation (Ctrl+T/K/R)</span>
+              </div>
+              <p class="hint-text">💡 <em>Click <strong>Settings</strong> at the top right to configure your Google Gemini API key if you haven't yet.</em></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Input Area -->
+        <div class="input-card">
+          <form id="chat-form" class="input-form">
+            <textarea
+              id="prompt-input"
+              class="prompt-textarea"
+              placeholder="Ask anything (e.g. 'Build a 2-to-1 Multiplexer', 'Turn on switch A', 'Step the clock 3 times')..."
+              rows="2"
+            ></textarea>
+            <div class="input-bottom-bar">
+              <div class="input-meta-info">
+                <span class="active-model-pill" id="active-model-pill">Gemini 3.8 Flash</span>
+                <span class="keyboard-hint">Press <kbd>Ctrl+Enter</kbd> to submit</span>
+              </div>
+              <button type="submit" class="submit-btn" id="send-btn">
+                <span class="btn-text">Send</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="22" y1="2" x2="11" y2="13"/>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Right Column: Circuit Board, Pin Board, & Diagnostics -->
+      <aside class="sidebar-section">
+        <!-- Current Circuit Card -->
+        <div class="panel-card circuit-status-card">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                <polyline points="2 17 12 22 22 17"/>
+                <polyline points="2 12 12 17 22 12"/>
+              </svg>
+              <h3>Active Circuit</h3>
+            </div>
+            <span class="status-pill-small" id="circuit-presence-pill">No Circuit</span>
+          </div>
+
+          <div class="circuit-actions-row">
+            <button class="action-btn secondary" id="btn-load-circ" title="Load active circuit into Logisim (Ctrl+O)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              <span>Load in Logisim</span>
+            </button>
+            <a href="/api/circuit/download" download="circuit.circ" class="action-btn secondary" id="btn-download-circ">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Download .circ</span>
+            </a>
+          </div>
+
+          <!-- XML Inspector Accordion -->
+          <details class="xml-accordion" id="xml-details">
+            <summary class="xml-summary">
+              <span>View Generated XML</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </summary>
+            <pre class="xml-code-block"><code id="xml-code-view">&lt;!-- No circuit generated yet --&gt;</code></pre>
+          </details>
+        </div>
+
+        <!-- Interactive Pin Controller (Deterministic Poke) -->
+        <div class="panel-card pins-card">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <h3>Interactive Pin Board</h3>
+            </div>
+            <span class="sub-badge" id="pin-count-badge">0 Pins</span>
+          </div>
+          <p class="panel-desc">Click any pin below to poke its live switch in Logisim without vision delay.</p>
+
+          <div class="pins-grid" id="pins-grid">
+            <div class="empty-pins-notice" id="empty-pins-notice">
+              <span>Generate a circuit to see interactive pins.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Embedded Schematic Canvas -->
+        <div class="panel-card schematic-card" id="schematic-card">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="20" rx="4"/>
+                <path d="M7 12h10"/>
+                <path d="M12 7v10"/>
+              </svg>
+              <h3>Live Circuit Canvas</h3>
+            </div>
+            <span class="sub-badge" id="schematic-badge">Active</span>
+          </div>
+          <p class="panel-desc">Live rendered circuit. Toggle pins directly here or in Logisim.</p>
+          <div class="schematic-viewport" id="schematic-viewport">
+            <svg id="schematic-svg" class="schematic-svg" viewBox="0 0 500 280">
+              <text x="250" y="140" fill="#64748b" text-anchor="middle" font-size="13" font-family="sans-serif">Ask AI to build a circuit to render canvas</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Diagnostic Screen View (On-Demand) -->
+        <div class="panel-card diagnostic-card" id="diagnostic-card">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <h3>Logisim Diagnostic View</h3>
+            </div>
+          </div>
+          <div class="screenshot-container" id="screenshot-container">
+            <div class="screenshot-placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              <p>Screenshots only captured on-demand when requested.</p>
+            </div>
+            <img id="live-screenshot-img" class="live-screenshot-img hidden" alt="Logisim window crop">
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settings-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div class="modal-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </div>
+            <h2>Settings & Gemini Credentials</h2>
+          </div>
+          <button class="modal-close-btn" id="close-settings-btn">&times;</button>
+        </div>
+
+        <form id="settings-form" class="modal-body">
+          <!-- API Key Section -->
+          <div class="form-group">
+            <label for="cfg-api-key">Google Gemini API Key / Token</label>
+            <div class="input-with-action">
+              <input
+                type="password"
+                id="cfg-api-key"
+                class="form-control"
+                placeholder="Enter Gemini key (e.g. AIza... or AQ.Ab8RN6...)"
+                autocomplete="off"
+              >
+              <button type="button" class="btn-toggle-vis" id="toggle-key-vis" title="Toggle visibility">
+                👁️
+              </button>
+            </div>
+            <small class="form-hint">Supports standard Gemini keys and Bearer tokens (AQ....). Stored locally in your config.json.</small>
+          </div>
+
+          <!-- Model Choice -->
+          <div class="form-group">
+            <label for="cfg-model-select">Gemini Model</label>
+            <select id="cfg-model-select" class="form-control select-control">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast & Stable — Recommended)</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash (Thinking Model)</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
+              <option value="custom">Custom Model...</option>
+            </select>
+          </div>
+
+          <!-- Custom Model Field (hidden unless 'custom' selected) -->
+          <div class="form-group hidden" id="custom-model-group">
+            <label for="cfg-custom-model">Custom Model Identifier</label>
+            <input
+              type="text"
+              id="cfg-custom-model"
+              class="form-control"
+              placeholder="e.g. gemini-3.8-flash-high or your fine-tuned model"
+            >
+          </div>
+
+          <!-- Test Connection Button -->
+          <div class="test-key-row">
+            <button type="button" class="action-btn secondary" id="btn-test-connection">
+              <span>Test API Connection</span>
+            </button>
+            <span class="test-result-badge hidden" id="test-result-badge"></span>
+          </div>
+
+          <hr class="divider">
+
+          <!-- Canvas Offsets Calibration -->
+          <div class="form-section-title">Canvas Geometry Calibration (Logisim 2.7.1)</div>
+          <div class="grid-2-col">
+            <div class="form-group">
+              <label for="cfg-offset-x">Canvas Offset X (px)</label>
+              <input type="number" id="cfg-offset-x" class="form-control" value="200">
+              <small class="form-hint">Toolbar/tree sidebar width (~200px)</small>
+            </div>
+            <div class="form-group">
+              <label for="cfg-offset-y">Canvas Offset Y (px)</label>
+              <input type="number" id="cfg-offset-y" class="form-control" value="70">
+              <small class="form-hint">Titlebar & icon toolbar height (~70px)</small>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-cancel" id="cancel-settings-btn">Cancel</button>
+            <button type="submit" class="btn-primary" id="save-settings-btn">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

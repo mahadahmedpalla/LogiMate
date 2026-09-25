@@ -1,0 +1,27 @@
+# Secrets & Personal API Keys (CRITICAL: NEVER COMMIT)
+config.json
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# PyInstaller Build Artifacts & Binaries
+build/
+dist/
+*.spec
+
+# Local outputs & generated circuits
+output/
+*.circ
+*.log
+
+# Environments & IDEs
+.env
+.venv
+env/
+venv/
+.idea/
+.vscode/
+*.swp
