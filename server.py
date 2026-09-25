@@ -3,6 +3,7 @@ FastAPI Server for AI Logisim Controller.
 Serves REST API, handles Gemini settings, connects to Logisim Driver and Agent.
 """
 
+import sys
 import os
 import json
 from typing import Dict, Any, Optional
@@ -16,8 +17,25 @@ from agent.gemini_client import GeminiClient, AVAILABLE_MODELS
 from agent.controller_agent import ControllerAgent
 
 
-CONFIG_FILE = "config.json"
-OUTPUT_DIR = "output"
+def get_bundle_dir() -> str:
+    """Returns directory where static assets (like ui/) are located."""
+    if getattr(sys, "frozen", False):
+        return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_data_dir() -> str:
+    """Returns directory where user data (config.json, output/) should persist."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+DATA_DIR = get_data_dir()
+BUNDLE_DIR = get_bundle_dir()
+
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+OUTPUT_DIR = os.path.join(DATA_DIR, "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -253,7 +271,7 @@ def download_circuit():
 
 
 # Mount UI static files
-UI_DIR = os.path.join(os.path.dirname(__file__), "ui")
+UI_DIR = os.path.join(BUNDLE_DIR, "ui")
 if os.path.exists(UI_DIR):
     app.mount("/static", StaticFiles(directory=UI_DIR), name="static")
 
