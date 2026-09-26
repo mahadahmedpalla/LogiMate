@@ -36,14 +36,37 @@ This will start the local server and automatically open the dashboard in your de
 
 ---
 
+## 📦 Download & Install (For End Users)
+
+1. Download the latest setup installer (`LogiMate-Setup-v1.0.0.exe`) from the [Releases Page](https://github.com/mahadahmedpalla/LogiMate/releases/latest).
+2. Double-click the installer to install LogiMate with desktop shortcuts and automatic Logisim detection.
+
+### 🛡️ Note on Windows SmartScreen ("Windows protected your PC")
+
+When launching the installer for the first time, Microsoft Defender SmartScreen may display a blue dialog stating:
+> *"Microsoft Defender SmartScreen prevented an unrecognized app from starting."*
+
+**This is completely normal for newly released, open-source software that is not signed with an enterprise certificate. LogiMate is 100% clean, open-source, and contains zero malware.**
+
+#### How to proceed (takes 2 seconds):
+1. On the blue screen, click the underline link: **"More info"**.
+2. Click the button: **"Run anyway"**.
+3. The setup wizard will start immediately!
+
+---
+
 ## 🎯 Distributing as an `.exe` for Your Website
 
-To package this app into a standalone Windows executable that anyone visiting your website can download:
+To package this app into a standalone Windows executable and setup installer:
 
 ```bash
+# 1. Compile standalone application:
 python build_exe.py
+
+# 2. Compile single-file Windows setup installer:
+python build_installer.py
 ```
-The compiled application will be generated in `dist/AI_Logisim_Controller/AI_Logisim_Controller.exe`. Users can simply unzip/download it and run it directly without installing Python.
+The compiled setup wizard will be created in `dist_installer/LogiMate-Setup-v1.0.0.exe`.
 
 ---
 

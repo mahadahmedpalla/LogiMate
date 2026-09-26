@@ -108,6 +108,13 @@ class PokePayload(BaseModel):
     canvas_y: Optional[int] = None
 
 
+class OpenUrlPayload(BaseModel):
+    url: Optional[str] = None
+
+
+CURRENT_VERSION = "1.0.0"
+
+
 @app.get("/api/status")
 def get_status():
     win_info = driver.get_window_info()
@@ -275,6 +282,61 @@ def download_circuit():
             media_type="application/xml",
         )
     raise HTTPException(status_code=404, detail="No circuit found.")
+
+
+@app.get("/api/check-update")
+def check_for_updates():
+    """Checks GitHub Releases for a newer version of LogiMate."""
+    import urllib.request
+
+    github_url = "https://api.github.com/repos/mahadahmedpalla/LogiMate/releases/latest"
+    try:
+        req = urllib.request.Request(
+            github_url,
+            headers={"User-Agent": f"LogiMate-App/{CURRENT_VERSION}"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                tag_name = data.get("tag_name", "").lstrip("v").strip()
+                html_url = data.get("html_url", "https://github.com/mahadahmedpalla/LogiMate/releases/latest")
+                body = data.get("body", "")
+
+                def parse_version(v_str):
+                    parts = []
+                    for part in v_str.split("."):
+                        digits = "".join(filter(str.isdigit, part))
+                        parts.append(int(digits) if digits else 0)
+                    return parts
+
+                cur_parts = parse_version(CURRENT_VERSION)
+                latest_parts = parse_version(tag_name)
+
+                is_newer = latest_parts > cur_parts
+                return {
+                    "update_available": is_newer,
+                    "current_version": CURRENT_VERSION,
+                    "latest_version": tag_name,
+                    "html_url": html_url,
+                    "release_notes": body,
+                }
+    except Exception:
+        pass
+
+    return {
+        "update_available": False,
+        "current_version": CURRENT_VERSION,
+        "latest_version": CURRENT_VERSION,
+        "html_url": "https://github.com/mahadahmedpalla/LogiMate/releases/latest",
+    }
+
+
+@app.post("/api/open-external")
+def open_external(payload: OpenUrlPayload):
+    import webbrowser
+    url = payload.url or "https://github.com/mahadahmedpalla/LogiMate/releases/latest"
+    webbrowser.open(url)
+    return {"success": True}
 
 
 # Mount UI static files

@@ -770,4 +770,52 @@ document.addEventListener("DOMContentLoaded", () => {
     formatted = formatted.replace(/\n/g, "<br>");
     return formatted;
   }
+
+  // ----------------------------------------------------
+  // Update Checker (GitHub Releases)
+  // ----------------------------------------------------
+  const updateModal = document.getElementById("update-modal");
+  const closeUpdateBtn = document.getElementById("close-update-btn");
+  const dismissUpdateBtn = document.getElementById("dismiss-update-btn");
+  const btnOpenUpdateLink = document.getElementById("btn-open-update-link");
+  const updateTagBadge = document.getElementById("update-tag-badge");
+  const currentInstalledVer = document.getElementById("current-installed-ver");
+  const updateNotesPreview = document.getElementById("update-notes-preview");
+
+  function closeUpdateModal() {
+    if (updateModal) updateModal.classList.add("hidden");
+  }
+
+  if (closeUpdateBtn) closeUpdateBtn.addEventListener("click", closeUpdateModal);
+  if (dismissUpdateBtn) dismissUpdateBtn.addEventListener("click", closeUpdateModal);
+
+  async function checkForUpdates() {
+    try {
+      const res = await fetch("/api/check-update");
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d.update_available) {
+        if (updateTagBadge) updateTagBadge.textContent = "v" + d.latest_version + " Live";
+        if (currentInstalledVer) currentInstalledVer.textContent = d.current_version;
+        if (updateNotesPreview && d.release_notes) {
+          updateNotesPreview.textContent = d.release_notes.substring(0, 350) + (d.release_notes.length > 350 ? "..." : "");
+        }
+        if (btnOpenUpdateLink) {
+          btnOpenUpdateLink.onclick = () => {
+            fetch("/api/open-external", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: d.html_url || "https://github.com/mahadahmedpalla/LogiMate/releases/latest" })
+            });
+          };
+        }
+        if (updateModal) updateModal.classList.remove("hidden");
+      }
+    } catch (e) {
+      // Silently ignore if offline
+    }
+  }
+
+  // Check on launch after a brief delay
+  setTimeout(checkForUpdates, 1800);
 });

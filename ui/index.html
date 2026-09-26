@@ -364,6 +364,35 @@
     </div>
   </div>
 
+  <!-- Update Available Modal -->
+  <div class="modal-overlay hidden" id="update-modal">
+    <div class="modal-card update-modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title-group" style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">🚀</span>
+          <h3>Update Available</h3>
+        </div>
+        <button type="button" class="btn-close" id="close-update-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 22px;">
+        <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+          <span id="update-tag-badge" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818cf8; font-weight: 600; font-size: 0.82rem; padding: 4px 10px; border-radius: 6px;">New Version Available</span>
+          <span style="font-size: 0.82rem; color: #94a3b8;">Installed: v<span id="current-installed-ver">1.0.0</span></span>
+        </div>
+        <p style="font-size: 0.9rem; line-height: 1.5; color: #e2e8f0; margin-bottom: 12px;">
+          A new version of <strong>LogiMate</strong> is available on GitHub with 100% accurate circuit routing, Priority Encoder support, and stability fixes.
+        </p>
+        <div id="update-notes-preview" style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 10px 12px; font-size: 0.8rem; color: #94a3b8; max-height: 110px; overflow-y: auto; margin-bottom: 16px; white-space: pre-wrap;">Please update to ensure the best performance.</div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn-cancel" id="dismiss-update-btn">Later</button>
+          <button type="button" id="btn-open-update-link" class="action-btn primary" style="background: linear-gradient(135deg, #4f46e5, #06b6d4); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+            ⬇️ Download Update
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>
