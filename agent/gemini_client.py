@@ -23,9 +23,10 @@ AVAILABLE_MODELS = [
 class GeminiClient:
     """Official Google GenAI SDK wrapper for AI Logisim Controller."""
 
-    def __init__(self, api_key: str = "", model_id: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str = "", model_id: str = "gemini-2.5-flash", thinking_budget: int = 1024):
         self.api_key = api_key.strip()
         self.model_id = model_id.strip() or "gemini-2.5-flash"
+        self.thinking_budget = thinking_budget
         self._client: Optional[genai.Client] = None
         self._init_client()
 
@@ -38,10 +39,12 @@ class GeminiClient:
         else:
             self._client = None
 
-    def set_credentials(self, api_key: str, model_id: Optional[str] = None):
+    def set_credentials(self, api_key: str, model_id: Optional[str] = None, thinking_budget: Optional[int] = None):
         self.api_key = api_key.strip()
         if model_id:
             self.model_id = model_id.strip()
+        if thinking_budget is not None:
+            self.thinking_budget = thinking_budget
         self._init_client()
 
     def test_connection(self) -> Dict[str, Any]:
@@ -98,11 +101,16 @@ class GeminiClient:
 
         full_prompt = "\n\n".join(prompt_parts)
 
-        # Configure SDK call
+        # Configure SDK call with thinking/reasoning budget
+        thinking_cfg = None
+        if self.thinking_budget is not None and self.thinking_budget >= 0:
+            thinking_cfg = types.ThinkingConfig(thinking_budget=self.thinking_budget)
+
         config = types.GenerateContentConfig(
             system_instruction=system_instruction if system_instruction else None,
             response_mime_type="application/json",
             temperature=temperature,
+            thinking_config=thinking_cfg,
         )
 
         # Models to try with automatic fallback
@@ -129,6 +137,24 @@ class GeminiClient:
             except APIError as e:
                 err_str = str(e)
                 last_error = err_str
+                if "thinking" in err_str.lower() and config.thinking_config is not None:
+                    # Retry without thinking_config for models that don't support it
+                    config.thinking_config = None
+                    try:
+                        resp = self._client.models.generate_content(
+                            model=model,
+                            contents=full_prompt,
+                            config=config,
+                        )
+                        if resp.text:
+                            try:
+                                parsed_json = json.loads(resp.text)
+                                return {"success": True, "data": parsed_json, "raw_text": resp.text}
+                            except json.JSONDecodeError:
+                                return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
+                    except Exception:
+                        pass
+
                 if "503" in err_str or "high demand" in err_str.lower() or "not found" in err_str.lower():
                     # Fallback to secondary model
                     continue

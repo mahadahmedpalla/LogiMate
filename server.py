@@ -44,6 +44,7 @@ def load_config() -> Dict[str, Any]:
         "gemini_api_key": "",
         "gemini_model": "gemini-2.5-flash",
         "custom_model": "",
+        "thinking_budget": 1024,
         "canvas_offset_x": 200,
         "canvas_offset_y": 70,
     }
@@ -75,6 +76,7 @@ driver = LogisimDriver(
 gemini = GeminiClient(
     api_key=config.get("gemini_api_key", ""),
     model_id=active_model,
+    thinking_budget=int(config.get("thinking_budget", 1024)),
 )
 
 agent = ControllerAgent(
@@ -91,6 +93,7 @@ class SettingsPayload(BaseModel):
     gemini_api_key: Optional[str] = None
     gemini_model: Optional[str] = None
     custom_model: Optional[str] = None
+    thinking_budget: Optional[int] = None
     canvas_offset_x: Optional[int] = None
     canvas_offset_y: Optional[int] = None
 
@@ -128,6 +131,7 @@ def get_settings():
         "gemini_api_key": masked_key,
         "gemini_model": config.get("gemini_model", "gemini-2.5-flash"),
         "custom_model": config.get("custom_model", ""),
+        "thinking_budget": config.get("thinking_budget", 1024),
         "canvas_offset_x": driver.canvas_offset_x,
         "canvas_offset_y": driver.canvas_offset_y,
         "available_models": AVAILABLE_MODELS,
@@ -143,6 +147,8 @@ def update_settings(payload: SettingsPayload):
         config["gemini_model"] = payload.gemini_model.strip()
     if payload.custom_model is not None:
         config["custom_model"] = payload.custom_model.strip()
+    if payload.thinking_budget is not None:
+        config["thinking_budget"] = payload.thinking_budget
     if payload.canvas_offset_x is not None:
         config["canvas_offset_x"] = payload.canvas_offset_x
         driver.canvas_offset_x = payload.canvas_offset_x
@@ -157,6 +163,7 @@ def update_settings(payload: SettingsPayload):
     gemini.set_credentials(
         api_key=config.get("gemini_api_key", ""),
         model_id=model_to_use,
+        thinking_budget=int(config.get("thinking_budget", 1024)),
     )
 
     return {"success": True, "message": "Settings saved successfully."}

@@ -319,6 +319,17 @@
             >
           </div>
 
+          <!-- Thinking / Reasoning Mode -->
+          <div class="form-group">
+            <label for="cfg-thinking-budget">Reasoning / Thinking Budget</label>
+            <select id="cfg-thinking-budget" class="form-control select-control">
+              <option value="1024" selected>Balanced (~3-4s — Recommended for precise wiring & math)</option>
+              <option value="2048">Deep Reasoning (~5-8s — Best for complex ALUs & datapaths)</option>
+              <option value="0">Instant (~1-2s — Minimal thinking, fastest responses)</option>
+            </select>
+            <small class="form-hint">Allows Gemini to calculate pin coordinates and verify bus widths on an internal scratchpad before generating circuits.</small>
+          </div>
+
           <!-- Test Connection Button -->
           <div class="test-key-row">
             <button type="button" class="action-btn secondary" id="btn-test-connection">

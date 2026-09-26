@@ -61,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const cfgModelSelect = document.getElementById("cfg-model-select");
   const customModelGroup = document.getElementById("custom-model-group");
   const cfgCustomModel = document.getElementById("cfg-custom-model");
+  const cfgThinkingBudget = document.getElementById("cfg-thinking-budget");
   const cfgOffsetX = document.getElementById("cfg-offset-x");
   const cfgOffsetY = document.getElementById("cfg-offset-y");
   const toggleKeyVis = document.getElementById("toggle-key-vis");
@@ -648,6 +649,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       cfgOffsetX.value = data.canvas_offset_x || 200;
       cfgOffsetY.value = data.canvas_offset_y || 70;
+      if (cfgThinkingBudget && data.thinking_budget !== undefined) {
+        cfgThinkingBudget.value = String(data.thinking_budget);
+      }
       if (data.gemini_api_key) {
         cfgApiKey.placeholder = `Configured (${data.gemini_api_key})`;
       }
@@ -718,6 +722,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const payload = {
       gemini_model: cfgModelSelect.value,
       custom_model: cfgCustomModel.value.trim(),
+      thinking_budget: cfgThinkingBudget ? parseInt(cfgThinkingBudget.value, 10) : 1024,
       canvas_offset_x: parseInt(cfgOffsetX.value, 10) || 200,
       canvas_offset_y: parseInt(cfgOffsetY.value, 10) || 70,
     };
