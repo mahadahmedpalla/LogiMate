@@ -212,6 +212,21 @@ def get_component_ports(comp: CircuitComponent) -> List[Tuple[int, int]]:
     elif name == "Decoder":
         ports.append((x, y))           # Select
         ports.extend([(x + 30, y - 10), (x + 30, y + 10)])
+    elif name == "Priority Encoder":
+        select_bits = int(attrs.get("select", 3))
+        n = 1 << select_bits
+        y_start = y - 5 * n + 10
+        # Data inputs D0..D(n-1) on left side (facing east)
+        for i in range(n):
+            ports.append((x - 40, y_start + 10 * i))
+        # Code OUT (select bits) at (x, y)
+        ports.append((x, y))
+        # Group Signal GS (AnyActive, 1 bit) at (x, y + 10)
+        ports.append((x, y + 10))
+        # Enable Out at (x - 20, y_start - 10)
+        ports.append((x - 20, y_start - 10))
+        # Enable In at (x - 20, y_start + 10 * n)
+        ports.append((x - 20, y_start + 10 * n))
     elif name == "Splitter":
         ports.append((x, y))           # Stem
         fanout = int(attrs.get("fanout", 2))

@@ -96,6 +96,17 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
 - Multiplexer:
   - loc=(x, y) is output.
   - Data inputs at (x-40, y-10) and (x-40, y+10) for 2:1. Select at (x-20, y+20).
+- Priority Encoder (Plexers, loc=(x, y)):
+  - select: bit width of output code. select=2 for 4-to-2 encoder (4 inputs D0..D3), select=3 for 8-to-3 (8 inputs D0..D7).
+  - Inputs D0..D(n-1) are on the left side (x-40), vertically spaced by 10 starting at y - 5*n + 10.
+    For 4-to-2 (n=4) at loc=(200, 150):
+      - D0 at (160, 140)
+      - D1 at (160, 150)
+      - D2 at (160, 160)
+      - D3 at (160, 170)
+  - Outputs on the right side:
+    - Code OUT (select bits) is at (x, y) [e.g. (200, 150)]
+    - Group Signal GS (AnyActive, 1-bit output) is at (x, y + 10) [e.g. (200, 160)]
 - Register & Counter:
   - Output Q is at (x, y).
   - Data input D at (x-30, y), Clock at (x-20, y+20), Clear at (x-10, y+20).

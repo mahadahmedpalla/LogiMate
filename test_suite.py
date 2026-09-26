@@ -89,6 +89,45 @@ def test_wire_snapping():
     print(f"[PASS] Wire Gap Snapper test passed ({len(wires)} wires perfectly connected to all 3 comparator terminals)")
 
 
+def test_priority_encoder():
+    b = CircuitBuilder("test_priority_encoder")
+    # Add 4-to-2 Priority Encoder at (200, 150)
+    b.add_component("Priority Encoder", 200, 150, attrs={"select": "2"})
+    b.add_pin("D0", 100, 140)
+    b.add_pin("D1", 100, 150)
+    b.add_pin("D2", 100, 160)
+    b.add_pin("D3", 100, 170)
+    b.add_pin("Code", 280, 150, width=2, is_output=True)
+    b.add_pin("AnyActive", 280, 160, is_output=True)
+
+    # Wires with intentional gaps
+    b.add_wire((100, 140), (150, 140)) # 10px short of (160, 140)
+    b.add_wire((100, 150), (160, 150))
+    b.add_wire((100, 160), (160, 160))
+    b.add_wire((100, 170), (160, 170))
+    b.add_wire((210, 150), (280, 150)) # 10px gap from (200, 150)
+    b.add_wire((200, 160), (280, 160))
+
+    xml_text = b.to_xml()
+    root = ET.fromstring(xml_text)
+    circ = root.find("circuit")
+    comp = circ.find(".//comp[@name='Priority Encoder']")
+    assert comp is not None, "Priority Encoder component missing from XML"
+    assert comp.find(".//a[@name='select']").attrib["val"] == "2"
+
+    # Verify that wire snapping closed the gaps to (160, 140) and (200, 150)
+    wires = circ.findall("wire")
+    wire_points = set()
+    for w in wires:
+        wire_points.add(w.attrib.get("from"))
+        wire_points.add(w.attrib.get("to"))
+
+    assert "(160,140)" in wire_points, "D0 terminal was not connected"
+    assert "(200,150)" in wire_points, "Code OUT terminal was not connected"
+    assert "(200,160)" in wire_points, "GS AnyActive terminal was not connected"
+    print(f"[PASS] Priority Encoder test passed (select=2, all terminals verified)")
+
+
 def test_driver():
     driver = LogisimDriver()
     # Should safely report connection status without error
@@ -102,6 +141,7 @@ if __name__ == "__main__":
     test_circ_builder()
     test_templates()
     test_wire_snapping()
+    test_priority_encoder()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
 

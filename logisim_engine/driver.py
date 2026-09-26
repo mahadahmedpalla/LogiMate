@@ -47,6 +47,11 @@ class LogisimDriver:
 
     def launch_logisim(self) -> bool:
         """Launches Logisim 2.7.1 using installed 64-bit Java (bypasses 32-bit Launch4j issue)."""
+        # If Logisim is already running, simply focus it without spawning another JVM
+        if self.find_window():
+            self.focus()
+            return True
+
         possible_paths = [
             r"f:\original final downloads\logisim-win-2.7.1 (1).exe",
             r"f:\original final downloads\logisim-win-2.7.1.exe",
@@ -59,6 +64,8 @@ class LogisimDriver:
                 import subprocess
                 try:
                     subprocess.Popen(["javaw", "-jar", p])
+                    time.sleep(0.5)
+                    self.focus()
                     return True
                 except Exception:
                     pass
@@ -193,8 +200,11 @@ class LogisimDriver:
         if not os.path.exists(abs_path):
             return False
 
-        old_win = self.find_window()
-        is_untitled = old_win and "untitled" in old_win.title.lower()
+        # Collect any existing Logisim windows to close after launching the new circuit
+        old_windows = [
+            w for w in gw.getAllWindows()
+            if "logisim" in w.title.lower() and "ai logisim controller" not in w.title.lower()
+        ]
 
         # Locate Logisim executable
         possible_exes = [
@@ -212,13 +222,13 @@ class LogisimDriver:
                 subprocess.Popen(["javaw", "-jar", exe_path, abs_path])
                 time.sleep(0.8)
 
-                # Close empty untitled window if one was open
-                if is_untitled and old_win:
+                # Close previous Logisim windows to prevent window and JVM stacking
+                for ow in old_windows:
                     try:
                         if HAS_WIN32:
-                            win32gui.PostMessage(old_win._hWnd, win32con.WM_CLOSE, 0, 0)
+                            win32gui.PostMessage(ow._hWnd, win32con.WM_CLOSE, 0, 0)
                         else:
-                            old_win.close()
+                            ow.close()
                     except Exception:
                         pass
 

@@ -123,7 +123,7 @@ def _add_circuit_element(builder: CircuitBuilder, elem: Any, default_type: Optio
             label=label,
         )
 
-    # 3. Plexer detection (Multiplexer, Demultiplexer, Decoder)
+    # 3. Plexer detection (Multiplexer, Demultiplexer, Decoder, Priority Encoder)
     if "MUX" in type_upper or "MULTIPLEXER" in type_upper:
         select_bits = int(elem.get("select_bits", elem.get("select", 1)))
         return builder.add_mux(
@@ -133,6 +133,20 @@ def _add_circuit_element(builder: CircuitBuilder, elem: Any, default_type: Optio
             width=width,
             label=label,
         )
+
+    if "PRIORITY" in type_upper or "ENCODER" in type_upper:
+        select_val = str(elem.get("select", elem.get("select_bits", 2)))
+        attrs = dict(elem.get("attrs") or {})
+        if "select" not in attrs:
+            attrs["select"] = select_val
+        comp = builder.add_component(
+            name="Priority Encoder",
+            x=x,
+            y=y,
+            attrs=attrs,
+            label=label,
+        )
+        return {"out": (x, y), "component": comp}
 
     # 4. Memory detection (Register, Counter)
     if "REGISTER" in type_upper:
@@ -368,6 +382,27 @@ class ControllerAgent:
                 action_status["details"] = str(e)
 
             executed_actions.append(action_status)
+
+        # Guaranteed Auto-Open:
+        # If a circuit was successfully built (custom or template), ensure it is opened in Logisim,
+        # even if Gemini omitted "open_in_logisim" from the actions array.
+        circuit_built = any(
+            a.get("action") in ("build_custom_circuit", "build_template") and a.get("status") == "success"
+            for a in executed_actions
+        )
+        already_opened = any(a.get("action") == "open_in_logisim" for a in executed_actions)
+
+        if circuit_built and not already_opened and os.path.exists(self.current_circ_path):
+            ok = self.driver.open_circuit_direct(self.current_circ_path)
+            executed_actions.append({
+                "action": "open_in_logisim",
+                "status": "success" if ok else "warning",
+                "details": (
+                    f"Auto-loaded {os.path.basename(self.current_circ_path)} directly into Logisim."
+                    if ok
+                    else "Circuit file ready on disk."
+                ),
+            })
 
         return {
             "success": True,
