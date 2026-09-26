@@ -53,6 +53,42 @@ def test_templates():
         print(f"[PASS] Template '{name}' passed ({len(b.components)} components, {len(b.wires)} wires, pins: {list(b.pin_map.keys())})")
 
 
+def test_wire_snapping():
+    b = CircuitBuilder("test_snap")
+    b.add_arithmetic("Comparator", 200, 150, width=8)
+    b.add_pin("A", 100, 140, width=8)
+    b.add_pin("B", 100, 160, width=8)
+    b.add_pin("A_greater_B", 280, 140, is_output=True)
+    b.add_pin("A_equal_B", 280, 150, is_output=True)
+    b.add_pin("A_less_B", 280, 160, is_output=True)
+
+    # Inputs connect cleanly
+    b.add_wire((100, 140), (160, 140))
+    b.add_wire((100, 160), (160, 160))
+
+    # Outputs have intentional 20px gap (start at x=220 instead of x=200)
+    b.add_wire((220, 140), (280, 140))
+    b.add_wire((220, 150), (280, 150))
+    b.add_wire((220, 160), (280, 160))
+
+    xml_text = b.to_xml()
+    root = ET.fromstring(xml_text)
+    circ = root.find("circuit")
+    wires = circ.findall("wire")
+
+    terminals = {"(200,140)", "(200,150)", "(200,160)"}
+    connected = set()
+    for w in wires:
+        f, t = w.attrib.get("from"), w.attrib.get("to")
+        if f in terminals:
+            connected.add(f)
+        if t in terminals:
+            connected.add(t)
+
+    assert connected == terminals, f"Failed to snap terminals: {terminals - connected}"
+    print(f"[PASS] Wire Gap Snapper test passed ({len(wires)} wires perfectly connected to all 3 comparator terminals)")
+
+
 def test_driver():
     driver = LogisimDriver()
     # Should safely report connection status without error
@@ -65,6 +101,8 @@ if __name__ == "__main__":
     print("Running AI Logisim Controller Test Suite...")
     test_circ_builder()
     test_templates()
+    test_wire_snapping()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
+
 

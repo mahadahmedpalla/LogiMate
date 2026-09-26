@@ -63,6 +63,29 @@ Available Actions:
    }
 
 Logisim 2.7.1 Component Coordinate & Terminal Rules:
+- Pins:
+  - Input pin: loc=(x, y), wire connects at (x, y). facing="east".
+  - Output pin: loc=(x, y), wire connects at (x, y). facing="west".
+- Standard Gates (facing "east"):
+  - loc=(x, y) is the gate's output tip.
+  - 2-input gate (size 50): input 1 at (x-50, y-20), input 2 at (x-50, y+20).
+  - 3-input gate: inputs at (x-50, y-20), (x-50, y), (x-50, y+20).
+  - NOT gate (size 30): input at (x-30, y).
+- Comparator (Arithmetic, loc=(x, y)):
+  - Inputs (left side): Input A at (x-40, y-10), Input B at (x-40, y+10).
+  - Outputs (right edge at x):
+    - Greater output (A > B): (x, y-10) [top terminal '>']
+    - Equal output (A == B): (x, y) [middle terminal '=']
+    - Less output (A < B): (x, y+10) [bottom terminal '<']
+  - CRITICAL: Output terminals from top to bottom are Greater (y-10), Equal (y), Less (y+10)! Wires must connect directly to x (e.g. from [x, y-10], [x, y], [x, y+10]).
+- Adder & Subtractor (Arithmetic, loc=(x, y)):
+  - loc=(x, y) is the Sum or Difference output.
+  - Input A at (x-40, y-10), Input B at (x-40, y+10).
+  - Carry/Borrow-in at (x-20, y-20), Carry/Borrow-out at (x-20, y+20).
+- Multiplier & Divider (Arithmetic, loc=(x, y)):
+  - loc=(x, y) is the Product or Quotient output.
+  - Input A at (x-40, y-10), Input B at (x-40, y+10).
+  - Carry-in / upper bits at (x-20, y-20), Carry-out / Remainder at (x-20, y+20).
 - Splitter (facing "east", appear "left", at loc=(x, y)):
   - Stem (combined bus input/output) is at (x, y).
   - Arm k (for k from 0 to fanout-1) is at: (x + 20, y - (fanout - k) * 10).
@@ -70,23 +93,16 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
     - Stem: (160, 160)
     - Arm 0 (bits 0..15): (180, 140)
     - Arm 1 (bits 16..31): (180, 150)
-- Pins:
-  - Input pin: loc=(x, y), wire connects at (x, y). facing="east".
-  - Output pin: loc=(x, y), wire connects at (x, y). facing="west".
-- Standard Gates:
-  - loc=(x, y) is the gate's output tip.
-  - 2-input gate: input 1 at (x-50, y-20), input 2 at (x-50, y+20).
-  - NOT gate: input at (x-30, y).
-- Adder (Arithmetic):
-  - loc=(x, y) is the Sum output.
-  - Input A at (x-40, y-10), Input B at (x-40, y+10).
-  - Carry-in at (x-20, y-20), Carry-out at (x-20, y+20).
 - Multiplexer:
   - loc=(x, y) is output.
   - Data inputs at (x-40, y-10) and (x-40, y+10) for 2:1. Select at (x-20, y+20).
-- Register:
+- Register & Counter:
   - Output Q is at (x, y).
-  - Data D input at (x-30, y), Clock at (x-20, y+10).
+  - Data input D at (x-30, y), Clock at (x-20, y+20), Clear at (x-10, y+20).
+- D Flip-Flop:
+  - Data input D at (x-40, y), Clock at (x-40, y+20).
+  - Q output at (x, y), ~Q (inverted) at (x, y+20).
+
 
 3. `open_in_logisim`:
    {"action": "open_in_logisim"}
