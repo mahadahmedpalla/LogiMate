@@ -34,6 +34,7 @@ def build():
         "--hidden-import", "uvicorn.protocols.http.h11_impl",
         "--hidden-import", "uvicorn.lifespan.off",
         "--hidden-import", "uvicorn.lifespan.on",
+        "--distpath", "dist_build",
         "--hidden-import", "h11",
         "--hidden-import", "anyio",
         "run.py"
@@ -42,11 +43,22 @@ def build():
     print("Executing command:", " ".join(cmd))
     subprocess.check_call(cmd)
 
-    # Post-build: Ensure ui assets and icon are directly in dist root as well
+    # Post-build: Ensure built binary and assets are placed into dist/AI_Logisim_Controller safely
+    staging_dir = os.path.join("dist_build", "AI_Logisim_Controller")
     dist_dir = os.path.join("dist", "AI_Logisim_Controller")
+    os.makedirs(dist_dir, exist_ok=True)
+
+    if os.path.exists(staging_dir):
+        shutil.copytree(staging_dir, dist_dir, dirs_exist_ok=True)
+        print("Copied built binary to dist/AI_Logisim_Controller")
+        try:
+            shutil.rmtree("dist_build")
+        except Exception:
+            pass
+
     ui_dest = os.path.join(dist_dir, "ui")
     if not os.path.exists(ui_dest):
-        shutil.copytree("ui", ui_dest)
+        shutil.copytree("ui", ui_dest, dirs_exist_ok=True)
         print("Copied ui to dist/AI_Logisim_Controller/ui")
 
     icon_dest = os.path.join(dist_dir, "app_icon.ico")
