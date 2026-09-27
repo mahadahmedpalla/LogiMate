@@ -73,6 +73,7 @@ CRITICAL RULES:
 2. For simple circuits that do not need decomposition (e.g. single 1-bit adder, basic logic gates), return `subcircuits: []`.
 3. Give subcircuits clear, identifier-safe names (e.g. "ALU", "Register_8bit", "Instruction_Decoder", no spaces or special characters).
 4. Bit widths must be realistic and consistent across interconnected modules (e.g., 8-bit datapath uses width 8).
+5. If the user message is a general greeting, question, or not a circuit design request (e.g., "hi", "hello", "what is this?"), set `"is_conversational": true` and provide a helpful greeting with prompt ideas in `"conversational_response"`.
 """
 
 MODULE_SYNTHESIS_PROMPT = """
@@ -198,6 +199,32 @@ class PlannerAgent:
                     payload.update(extra)
                 progress_callback(payload)
 
+        # Fast path for casual greetings in Agent Mode
+        clean_p = prompt.strip().lower()
+        if clean_p in ["hi", "hello", "hey", "hola", "greetings", "help", "who are you", "what can you do"]:
+            report_progress("complete", "Agent Mode Ready", 100)
+            return {
+                "success": True,
+                "mode": "agent",
+                "system_name": "LogiMate Agent Planner",
+                "thought": "Conversational greeting acknowledged.",
+                "response": (
+                    "👋 **Hello! Agent Mode is active and ready.**\n\n"
+                    "In **Agent Mode**, I act as an autonomous digital architecture planner for **Logisim 2.7.1**. "
+                    "I can build complex, large-scale systems (such as complete CPUs, multi-op ALUs, and calculators) "
+                    "by decomposing them into modular subcircuits, synthesizing each sheet in isolation, and assembling them onto the main canvas.\n\n"
+                    "**Try an architectural prompt like:**\n"
+                    "- 🧠 *\"Build a complete 8-bit Mini CPU with ALU, Registers, and Program Counter in Logisim from scratch\"*\n"
+                    "- ⚙️ *\"Build an 8-bit ALU supporting ADD, SUB, AND, OR, XOR, NOT with Zero and Carry flags\"*\n"
+                    "- 🔢 *\"Build a 4-bit Calculator with Input Selectors and Display Decoders\"*"
+                ),
+                "plan": None,
+                "circuits": [],
+                "circuit_file": self.current_circ_path if os.path.exists(self.current_circ_path) else None,
+                "executed_actions": [],
+                "pin_map": self.active_pin_map,
+            }
+
         report_progress("planning", "Analyzing system architecture and deconstructing into subcircuits...", 10)
 
         # -----------------------------------------------------------------
@@ -218,6 +245,23 @@ class PlannerAgent:
                 "architecture_summary": "Direct system synthesis",
                 "subcircuits": [],
                 "assembly_strategy": "Direct canvas build",
+            }
+
+        # Handle model-reported conversational responses
+        if plan.get("is_conversational"):
+            resp_msg = plan.get("conversational_response") or "Hello! I am LogiMate's Agent Mode planner. Give me any complex digital system or CPU prompt to plan and synthesize!"
+            report_progress("complete", "Ready", 100)
+            return {
+                "success": True,
+                "mode": "agent",
+                "system_name": "LogiMate Agent Planner",
+                "thought": "Conversational response provided.",
+                "response": resp_msg,
+                "plan": plan,
+                "circuits": [],
+                "circuit_file": self.current_circ_path if os.path.exists(self.current_circ_path) else None,
+                "executed_actions": [],
+                "pin_map": self.active_pin_map,
             }
 
         self.last_plan = plan

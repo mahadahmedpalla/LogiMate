@@ -20,6 +20,17 @@ AVAILABLE_MODELS = [
 ]
 
 
+def _clean_json_str(raw: str) -> str:
+    s = raw.strip()
+    if s.startswith("```json"):
+        s = s[7:]
+    elif s.startswith("```"):
+        s = s[3:]
+    if s.endswith("```"):
+        s = s[:-3]
+    return s.strip()
+
+
 class GeminiClient:
     """Official Google GenAI SDK wrapper for AI Logisim Controller."""
 
@@ -128,8 +139,9 @@ class GeminiClient:
                 )
 
                 if resp.text:
+                    cleaned = _clean_json_str(resp.text)
                     try:
-                        parsed_json = json.loads(resp.text)
+                        parsed_json = json.loads(cleaned)
                         return {"success": True, "data": parsed_json, "raw_text": resp.text}
                     except json.JSONDecodeError:
                         return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
@@ -147,8 +159,9 @@ class GeminiClient:
                             config=config,
                         )
                         if resp.text:
+                            cleaned = _clean_json_str(resp.text)
                             try:
-                                parsed_json = json.loads(resp.text)
+                                parsed_json = json.loads(cleaned)
                                 return {"success": True, "data": parsed_json, "raw_text": resp.text}
                             except json.JSONDecodeError:
                                 return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
@@ -163,3 +176,16 @@ class GeminiClient:
                 last_error = str(e)
 
         return {"success": False, "error": f"Gemini Error: {last_error}"}
+
+    def generate_json(
+        self,
+        prompt: str,
+        system_instruction: str = "",
+        temperature: float = 0.2,
+    ) -> Dict[str, Any]:
+        """Generates structured JSON from a single prompt using official GenAI SDK."""
+        return self.generate_chat_response(
+            messages=[{"role": "user", "content": prompt}],
+            system_instruction=system_instruction,
+            temperature=temperature,
+        )
