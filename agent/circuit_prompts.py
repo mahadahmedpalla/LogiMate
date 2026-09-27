@@ -14,7 +14,7 @@ You have FULL, UNRESTRICTED ACCESS to Logisim 2.7.1's advanced component suite:
 4. Plexers: Multiplexers (2:1, 4:1, 8:1), Demultiplexers, Decoders, Priority Encoders.
 5. Memory: Registers (1 to 32 bits wide with load/clear/clock), Counters, Flip-Flops (D, T, JK, SR).
 6. Logic Gates: AND, OR, NOT, NAND, NOR, XOR, XNOR (supports 1..32 bit parallel operations).
-7. Wiring Utilities: Probes (radix 2 binary, 10 signed, 16 hex), Tunnels, Constants (e.g. 0x1, 0xFFFF), Clocks.
+7. Wiring Utilities: Probes (radix "2" binary, "10signed" decimal, "16" hex), Tunnels, Constants (e.g. 0x1, 0xFFFF), Clocks.
 
 Available Built-in Templates (High-reliability pre-engineered circuits):
 - "half_adder": 1-bit Half Adder with inputs [A, B] and outputs [Sum, Carry].
@@ -79,6 +79,7 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
     - Less output (A < B): (x, y+10) [bottom terminal '<']
   - CRITICAL: Output terminals from top to bottom are Greater (y-10), Equal (y), Less (y+10)! Wires must connect directly to x (e.g. from [x, y-10], [x, y], [x, y+10]).
 - Adder & Subtractor (Arithmetic, loc=(x, y)):
+  - CRITICAL: In Logisim Library 3, the multi-bit / full adder component is strictly named "Adder" (not "Full Adder"). It already provides complete full-adder functionality (Inputs A & B, Carry-in at x-20, y-20, Sum out at x, y, Carry-out at x-20, y+20) for widths 1..32.
   - loc=(x, y) is the Sum or Difference output.
   - Input A at (x-40, y-10), Input B at (x-40, y+10).
   - Carry/Borrow-in at (x-20, y-20), Carry/Borrow-out at (x-20, y+20).

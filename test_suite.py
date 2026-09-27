@@ -128,6 +128,38 @@ def test_priority_encoder():
     print(f"[PASS] Priority Encoder test passed (select=2, all terminals verified)")
 
 
+def test_normalization():
+    b = CircuitBuilder("test_norm")
+    # 1. Full Adder alias test
+    comp1 = b.add_component("Full Adder", 200, 100)
+    assert comp1.lib == 3, f"Expected lib 3, got {comp1.lib}"
+    assert comp1.name == "Adder", f"Expected 'Adder', got {comp1.name}"
+
+    res = b.add_arithmetic("FullAdder", 200, 160)
+    assert res["component"].name == "Adder"
+
+    # 2. Probe radix normalization test
+    b.add_probe(300, 100, radix=10)
+    b.add_probe(300, 140, radix="10")
+    b.add_probe(300, 180, radix="10unsigned")
+    b.add_probe(300, 220, radix=2)
+
+    xml_text = b.to_xml()
+    root = ET.fromstring(xml_text)
+    circ = root.find("circuit")
+
+    # Verify no 'Full Adder' in XML, only 'Adder' in lib 3
+    adders = circ.findall(".//comp[@name='Adder']")
+    assert len(adders) == 2, f"Expected 2 Adders, found {len(adders)}"
+
+    # Verify Probes
+    probes = circ.findall(".//comp[@name='Probe']")
+    assert len(probes) == 4
+    radixes = [p.find(".//a[@name='radix']").attrib["val"] for p in probes]
+    assert radixes == ["10signed", "10signed", "10unsigned", "2"], f"Unexpected radixes: {radixes}"
+    print(f"[PASS] Normalization test passed (Full Adder -> Adder, radix 10 -> 10signed)")
+
+
 def test_driver():
     driver = LogisimDriver()
     # Should safely report connection status without error
@@ -142,6 +174,7 @@ if __name__ == "__main__":
     test_templates()
     test_wire_snapping()
     test_priority_encoder()
+    test_normalization()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
 

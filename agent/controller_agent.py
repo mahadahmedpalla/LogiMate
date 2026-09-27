@@ -159,8 +159,8 @@ def _add_circuit_element(builder: CircuitBuilder, elem: Any, default_type: Optio
 
     # 5. Probe
     if "PROBE" in type_upper:
-        radix = int(elem.get("radix", 16))
-        pt = builder.add_probe(x=x, y=y, radix=radix, label=label)
+        radix_val = elem.get("radix", 16)
+        pt = builder.add_probe(x=x, y=y, radix=radix_val, label=label)
         return {"out": pt}
 
     # 6. Tunnel

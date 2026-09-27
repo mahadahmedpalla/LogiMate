@@ -5,7 +5,7 @@ Gates, Multi-bit Pins, Splitters, Multiplexers, Adders/Arithmetic, Registers/Mem
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 import collections
 import logging
 import xml.etree.ElementTree as ET
@@ -55,6 +55,10 @@ COMPONENT_LIB_MAP = {
 
     # Arithmetic (lib=3)
     "ADDER": (3, "Adder"),
+    "FULL ADDER": (3, "Adder"),
+    "FULLADDER": (3, "Adder"),
+    "1-BIT FULL ADDER": (3, "Adder"),
+    "1-BIT ADDER": (3, "Adder"),
     "SUBTRACTOR": (3, "Subtractor"),
     "MULTIPLIER": (3, "Multiplier"),
     "DIVIDER": (3, "Divider"),
@@ -238,6 +242,22 @@ def get_component_ports(comp: CircuitComponent) -> List[Tuple[int, int]]:
         ports.append((x, y))
 
     return ports
+
+
+def _normalize_probe_radix(val: Any) -> str:
+    """Normalizes any radix input (10, '10', 'dec', etc.) to valid Logisim 2.7.1 RadixOption."""
+    raw = str(val).strip().lower()
+    if raw in ("10", "10signed", "signed", "dec", "decimal"):
+        return "10signed"
+    elif raw in ("10unsigned", "unsigned", "uint"):
+        return "10unsigned"
+    elif raw in ("2", "bin", "binary"):
+        return "2"
+    elif raw in ("8", "oct", "octal"):
+        return "8"
+    elif raw in ("16", "hex", "hexadecimal"):
+        return "16"
+    return str(val).strip()
 
 
 @dataclass
@@ -648,12 +668,13 @@ class CircuitBuilder:
         self,
         x: int,
         y: int,
-        radix: int = 16,
+        radix: Union[int, str] = 16,
         facing: str = "west",
         label: Optional[str] = None,
     ) -> Tuple[int, int]:
-        """Adds a Probe display."""
-        attrs = {"radix": str(radix), "facing": facing}
+        """Adds a Probe display with auto-normalized radix."""
+        norm_radix = _normalize_probe_radix(radix)
+        attrs = {"radix": norm_radix, "facing": facing}
         if label:
             attrs["label"] = label
         comp = CircuitComponent(lib=0, name="Probe", x=x, y=y, attrs=attrs, label=label, ports=[(x, y)])
@@ -712,6 +733,8 @@ class CircuitBuilder:
         canonical_lib, canonical_name = COMPONENT_LIB_MAP.get(name_clean, (lib if lib is not None else 1, name))
 
         str_attrs = {str(k): str(v) for k, v in (attrs or {}).items()}
+        if canonical_name == "Probe" and "radix" in str_attrs:
+            str_attrs["radix"] = _normalize_probe_radix(str_attrs["radix"])
         if label and "label" not in str_attrs:
             str_attrs["label"] = label
 
