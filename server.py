@@ -42,7 +42,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def load_config() -> Dict[str, Any]:
     default_config = {
         "gemini_api_key": "",
-        "gemini_model": "gemini-2.5-flash",
+        "gemini_model": "gemini-3.6-flash",
         "custom_model": "",
         "thinking_budget": 1024,
         "canvas_offset_x": 200,
@@ -55,6 +55,11 @@ def load_config() -> Dict[str, Any]:
                 default_config.update(loaded)
         except Exception:
             pass
+
+    # Auto-migrate legacy 2.x/1.x models
+    if default_config.get("gemini_model") in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+        default_config["gemini_model"] = "gemini-3.6-flash"
+
     return default_config
 
 
@@ -66,7 +71,7 @@ def save_config(cfg: Dict[str, Any]):
 config = load_config()
 
 # Initialize Driver, Gemini, and Agent
-active_model = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-2.5-flash")
+active_model = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
 
 driver = LogisimDriver(
     canvas_offset_x=config.get("canvas_offset_x", 200),
@@ -136,7 +141,7 @@ def get_settings():
         masked_key = k[:4] + "..." + k[-4:] if len(k) > 8 else "***"
     return {
         "gemini_api_key": masked_key,
-        "gemini_model": config.get("gemini_model", "gemini-2.5-flash"),
+        "gemini_model": config.get("gemini_model", "gemini-3.6-flash"),
         "custom_model": config.get("custom_model", ""),
         "thinking_budget": config.get("thinking_budget", 1024),
         "canvas_offset_x": driver.canvas_offset_x,
@@ -166,7 +171,7 @@ def update_settings(payload: SettingsPayload):
     save_config(config)
 
     # Update runtime objects
-    model_to_use = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-2.5-flash")
+    model_to_use = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
     gemini.set_credentials(
         api_key=config.get("gemini_api_key", ""),
         model_id=model_to_use,
@@ -179,7 +184,7 @@ def update_settings(payload: SettingsPayload):
 @app.post("/api/test-key")
 def test_key(payload: SettingsPayload):
     key = payload.gemini_api_key.strip() if payload.gemini_api_key else config.get("gemini_api_key", "")
-    model = payload.gemini_model.strip() if payload.gemini_model else config.get("gemini_model", "gemini-2.5-flash")
+    model = payload.gemini_model.strip() if payload.gemini_model else config.get("gemini_model", "gemini-3.6-flash")
     if model == "custom" and payload.custom_model:
         model = payload.custom_model.strip()
 

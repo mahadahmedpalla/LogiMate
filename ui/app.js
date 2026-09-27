@@ -133,9 +133,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (id.includes("3.8")) return "Gemini 3.8 Flash";
     if (id.includes("3.7")) return "Gemini 3.7 Flash";
     if (id.includes("3.6")) return "Gemini 3.6 Flash";
-    if (id.includes("2.5")) return "Gemini 2.5 Flash";
-    if (id.includes("2.0")) return "Gemini 2.0 Flash";
-    if (id.includes("1.5")) return "Gemini 1.5 Flash";
+    if (id.includes("3.5")) return "Gemini 3.5 Flash";
+    if (id.includes("3.1")) return "Gemini 3.1 Flash Lite";
     return id;
   }
 
@@ -638,7 +637,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!res.ok) return;
       const data = await res.json();
 
-      if (data.gemini_model === "custom" || !["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"].includes(data.gemini_model)) {
+      if (data.gemini_model === "custom" || !["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"].includes(data.gemini_model)) {
         cfgModelSelect.value = "custom";
         customModelGroup.classList.remove("hidden");
         cfgCustomModel.value = data.custom_model || data.gemini_model;

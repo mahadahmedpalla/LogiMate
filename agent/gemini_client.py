@@ -11,9 +11,9 @@ from google.genai.errors import APIError
 
 
 AVAILABLE_MODELS = [
-    {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash (Fast & Stable — Recommended)"},
-    {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash (Latest Flagship)"},
+    {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash (Fast & Stable — Recommended)"},
     {"id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash"},
+    {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite (Ultra Fast)"},
     {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash"},
     {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash"},
     {"id": "custom", "name": "Custom Model..."},
@@ -23,9 +23,13 @@ AVAILABLE_MODELS = [
 class GeminiClient:
     """Official Google GenAI SDK wrapper for AI Logisim Controller."""
 
-    def __init__(self, api_key: str = "", model_id: str = "gemini-2.5-flash", thinking_budget: int = 1024):
+    def __init__(self, api_key: str = "", model_id: str = "gemini-3.6-flash", thinking_budget: int = 1024):
         self.api_key = api_key.strip()
-        self.model_id = model_id.strip() or "gemini-2.5-flash"
+        m = model_id.strip() or "gemini-3.6-flash"
+        # Auto-migrate legacy 2.x models
+        if m in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+            m = "gemini-3.6-flash"
+        self.model_id = m
         self.thinking_budget = thinking_budget
         self._client: Optional[genai.Client] = None
         self._init_client()
@@ -42,7 +46,10 @@ class GeminiClient:
     def set_credentials(self, api_key: str, model_id: Optional[str] = None, thinking_budget: Optional[int] = None):
         self.api_key = api_key.strip()
         if model_id:
-            self.model_id = model_id.strip()
+            m = model_id.strip()
+            if m in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
+                m = "gemini-3.6-flash"
+            self.model_id = m
         if thinking_budget is not None:
             self.thinking_budget = thinking_budget
         self._init_client()
@@ -68,7 +75,7 @@ class GeminiClient:
             if "503" in err_msg or "high demand" in err_msg.lower():
                 return {
                     "success": False,
-                    "error": f"{self.model_id} is temporarily experiencing high traffic on Google's servers. Select 'Gemini 2.5 Flash' to connect immediately."
+                    "error": f"{self.model_id} is temporarily experiencing high traffic on Google's servers. Select 'Gemini 3.6 Flash' or 'Gemini 3.1 Flash Lite' to connect immediately."
                 }
             return {"success": False, "error": f"Google API Error: {err_msg}"}
         except Exception as e:
@@ -113,11 +120,14 @@ class GeminiClient:
             thinking_config=thinking_cfg,
         )
 
-        # Models to try with automatic fallback
+        # Models to try with automatic fallback across modern 3.x Flash models
         models_to_try = [self.model_id]
-        if self.model_id != "gemini-2.5-flash":
-            models_to_try.append("gemini-2.5-flash")
+        fallback_candidates = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
+        for fc in fallback_candidates:
+            if fc not in models_to_try:
+                models_to_try.append(fc)
 
+        primary_error = ""
         last_error = ""
         for model in models_to_try:
             try:
@@ -137,6 +147,9 @@ class GeminiClient:
             except APIError as e:
                 err_str = str(e)
                 last_error = err_str
+                if model == self.model_id:
+                    primary_error = err_str
+
                 if "thinking" in err_str.lower() and config.thinking_config is not None:
                     # Retry without thinking_config for models that don't support it
                     config.thinking_config = None
@@ -156,10 +169,12 @@ class GeminiClient:
                         pass
 
                 if "503" in err_str or "high demand" in err_str.lower() or "not found" in err_str.lower():
-                    # Fallback to secondary model
+                    # Fallback to next modern 3.x candidate
                     continue
-                return {"success": False, "error": f"GenAI API Error: {err_str}"}
+                return {"success": False, "error": f"GenAI API Error on {model}: {err_str}"}
             except Exception as e:
                 last_error = str(e)
+                if model == self.model_id:
+                    primary_error = str(e)
 
-        return {"success": False, "error": f"Gemini Error: {last_error}"}
+        return {"success": False, "error": f"Gemini Error on {self.model_id}: {primary_error or last_error}"}
