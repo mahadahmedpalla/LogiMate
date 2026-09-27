@@ -4,11 +4,14 @@ Handles high-capacity API keys (AQ.... and AIza....), token pooling, and structu
 """
 
 import json
-from typing import Dict, Any, List, Optional
+import time
+import logging
+from typing import Dict, Any, List, Optional, Callable
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
+logger = logging.getLogger("AI_Logisim_Controller.gemini_client")
 
 AVAILABLE_MODELS = [
     {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash (Fast & Stable — Recommended)"},
@@ -44,8 +47,11 @@ class GeminiClient:
     def _init_client(self):
         if self.api_key:
             try:
-                self._client = genai.Client(api_key=self.api_key)
-            except Exception:
+                # 45 second request timeout in milliseconds to prevent infinite socket hangs
+                http_opts = types.HttpOptions(timeout=45000)
+                self._client = genai.Client(api_key=self.api_key, http_options=http_opts)
+            except Exception as e:
+                logger.warning(f"Error initializing GenAI Client: {e}")
                 self._client = None
         else:
             self._client = None
@@ -81,6 +87,11 @@ class GeminiClient:
                     "success": False,
                     "error": f"{self.model_id} is temporarily experiencing high traffic on Google's servers. Select 'Gemini 2.5 Flash' to connect immediately."
                 }
+            if "429" in err_msg or "resource_exhausted" in err_msg.lower():
+                return {
+                    "success": False,
+                    "error": f"Rate limit reached on {self.model_id}. Please wait a moment or select 'Gemini 2.5 Flash'."
+                }
             return {"success": False, "error": f"Google API Error: {err_msg}"}
         except Exception as e:
             return {"success": False, "error": f"Connection error: {str(e)}"}
@@ -90,9 +101,11 @@ class GeminiClient:
         messages: List[Dict[str, str]],
         system_instruction: str = "",
         temperature: float = 0.2,
+        status_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """
         Generates structured JSON circuit commands using official GenAI SDK.
+        Includes automatic 429 backoff retry, socket timeout handling, and model fallback.
         """
         if not self.api_key:
             return {
@@ -131,49 +144,64 @@ class GeminiClient:
 
         last_error = ""
         for model in models_to_try:
-            try:
-                resp = self._client.models.generate_content(
-                    model=model,
-                    contents=full_prompt,
-                    config=config,
-                )
+            for attempt in range(2):
+                try:
+                    resp = self._client.models.generate_content(
+                        model=model,
+                        contents=full_prompt,
+                        config=config,
+                    )
 
-                if resp.text:
-                    cleaned = _clean_json_str(resp.text)
-                    try:
-                        parsed_json = json.loads(cleaned)
-                        return {"success": True, "data": parsed_json, "raw_text": resp.text}
-                    except json.JSONDecodeError:
-                        return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
+                    if resp.text:
+                        cleaned = _clean_json_str(resp.text)
+                        try:
+                            parsed_json = json.loads(cleaned)
+                            return {"success": True, "data": parsed_json, "raw_text": resp.text}
+                        except json.JSONDecodeError:
+                            return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
 
-            except APIError as e:
-                err_str = str(e)
-                last_error = err_str
-                if "thinking" in err_str.lower() and config.thinking_config is not None:
-                    # Retry without thinking_config for models that don't support it
-                    config.thinking_config = None
-                    try:
-                        resp = self._client.models.generate_content(
-                            model=model,
-                            contents=full_prompt,
-                            config=config,
-                        )
-                        if resp.text:
-                            cleaned = _clean_json_str(resp.text)
-                            try:
-                                parsed_json = json.loads(cleaned)
-                                return {"success": True, "data": parsed_json, "raw_text": resp.text}
-                            except json.JSONDecodeError:
-                                return {"success": True, "raw_text": resp.text, "data": {"response": resp.text, "actions": []}}
-                    except Exception:
-                        pass
+                except Exception as e:
+                    err_str = str(e)
+                    last_error = err_str
 
-                if "503" in err_str or "high demand" in err_str.lower() or "not found" in err_str.lower():
-                    # Fallback to secondary model
-                    continue
-                return {"success": False, "error": f"GenAI API Error: {err_str}"}
-            except Exception as e:
-                last_error = str(e)
+                    # Check for rate limiting / quota
+                    is_rate_limit = (
+                        "429" in err_str
+                        or "resource_exhausted" in err_str.lower()
+                        or "quota" in err_str.lower()
+                        or "rate limit" in err_str.lower()
+                    )
+                    # Check for overload / unavailable
+                    is_overload = (
+                        "503" in err_str
+                        or "high demand" in err_str.lower()
+                        or "not found" in err_str.lower()
+                        or "unavailable" in err_str.lower()
+                    )
+                    # Check for timeout
+                    is_timeout = (
+                        "timed out" in err_str.lower()
+                        or "timeout" in err_str.lower()
+                    )
+
+                    # Handle unsupported thinking config
+                    if "thinking" in err_str.lower() and config.thinking_config is not None:
+                        config.thinking_config = None
+                        continue
+
+                    # If retryable error and on first attempt for this model, wait and retry
+                    if (is_rate_limit or is_overload or is_timeout) and attempt == 0:
+                        delay = 3.0 if is_rate_limit else 1.5
+                        reason = "rate limit reached" if is_rate_limit else ("timed out" if is_timeout else "server busy")
+                        if status_callback:
+                            status_callback(f"{model} {reason}. Retrying in {int(delay)}s...")
+                        time.sleep(delay)
+                        continue
+
+                    # Otherwise, break attempt loop to switch to next model (e.g. gemini-2.5-flash fallback)
+                    if status_callback and model != models_to_try[-1]:
+                        status_callback(f"Switching from {model} to fallback {models_to_try[-1]}...")
+                    break
 
         return {"success": False, "error": f"Gemini Error: {last_error}"}
 
@@ -182,10 +210,12 @@ class GeminiClient:
         prompt: str,
         system_instruction: str = "",
         temperature: float = 0.2,
+        status_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """Generates structured JSON from a single prompt using official GenAI SDK."""
         return self.generate_chat_response(
             messages=[{"role": "user", "content": prompt}],
             system_instruction=system_instruction,
             temperature=temperature,
+            status_callback=status_callback,
         )

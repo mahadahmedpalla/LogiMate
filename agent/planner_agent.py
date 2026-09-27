@@ -6,6 +6,7 @@ and interconnects them on the top-level 'main' canvas.
 """
 
 import os
+import time
 import json
 import logging
 from typing import Dict, Any, List, Optional, Callable, Tuple
@@ -230,9 +231,13 @@ class PlannerAgent:
         # -----------------------------------------------------------------
         # STEP 1: Deconstruction Plan
         # -----------------------------------------------------------------
+        def plan_status_cb(msg: str):
+            report_progress("planning", f"Analyzing system architecture... ({msg})", 15)
+
         plan_resp = self.gemini.generate_json(
             prompt=f"System Architecture Request:\n{prompt}",
             system_instruction=PLANNER_SYSTEM_PROMPT,
+            status_callback=plan_status_cb,
         )
 
         plan = {}
@@ -284,6 +289,10 @@ class PlannerAgent:
 
             total_sub = len(subcircuits)
             for idx, sub in enumerate(subcircuits):
+                if idx > 0:
+                    # 1.5s rate pacing between subcircuits to keep under Gemini free-tier RPM/burst limit
+                    time.sleep(1.5)
+
                 sub_name = sub.get("name", f"Subcircuit_{idx+1}").replace(" ", "_")
                 sub_purpose = sub.get("purpose", "")
                 sub_inputs = sub.get("inputs", [])
@@ -297,6 +306,13 @@ class PlannerAgent:
                     {"current_module": sub_name},
                 )
 
+                sub_cb = lambda msg, p=pct, n=sub_name, i=idx, t=total_sub: report_progress(
+                    "synthesizing_subcircuit",
+                    f"Synthesizing modular sheet '{n}' ({i+1}/{t})... ({msg})",
+                    p,
+                    {"current_module": n},
+                )
+
                 sub_prompt = MODULE_SYNTHESIS_PROMPT.format(
                     module_name=sub_name,
                     purpose=sub_purpose,
@@ -307,6 +323,7 @@ class PlannerAgent:
                 mod_resp = self.gemini.generate_json(
                     prompt=sub_prompt,
                     system_instruction="You are an expert digital logic engineer producing clean, isolated Logisim 2.7.1 circuits.",
+                    status_callback=sub_cb,
                 )
 
                 builder.set_active_circuit(sub_name)
@@ -323,6 +340,10 @@ class PlannerAgent:
         # -----------------------------------------------------------------
         # STEP 3: Top-Level Assembly on 'main'
         # -----------------------------------------------------------------
+        if subcircuits:
+            # 1.0s pacing before assembling top level
+            time.sleep(1.0)
+
         report_progress("assembling_main", "Assembling top-level datapath, control signals, and probes on 'main'...", 75)
         builder.set_active_circuit("main")
 
@@ -336,9 +357,16 @@ class PlannerAgent:
             subcircuit_specs=sub_specs_str,
         )
 
+        assembly_cb = lambda msg: report_progress(
+            "assembling_main",
+            f"Assembling top-level datapath on 'main'... ({msg})",
+            75,
+        )
+
         assembly_resp = self.gemini.generate_json(
             prompt=assembly_prompt,
             system_instruction="You are an expert digital logic architect assembling top-level system datapaths in Logisim 2.7.1.",
+            status_callback=assembly_cb,
         )
 
         if assembly_resp.get("success") and assembly_resp.get("data"):

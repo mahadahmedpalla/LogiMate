@@ -388,6 +388,41 @@ def test_server_endpoints():
     print(f"[PASS] Server Endpoints & Streaming test passed (Normal + Agent Mode)")
 
 
+def test_gemini_client_resilience():
+    from unittest.mock import MagicMock, patch
+    from agent.gemini_client import GeminiClient
+
+    # Test 1: Verify HttpOptions has timeout=45000 (45s)
+    client = GeminiClient(api_key="test_key_abc", model_id="gemini-3.6-flash")
+    assert client._client is not None
+    assert client._client._api_client._http_options.timeout == 45000
+
+    # Test 2: Simulate 429 Rate Limit on gemini-3.6-flash, followed by successful fallback on gemini-2.5-flash
+    mock_resp_success = MagicMock()
+    mock_resp_success.text = '{"success": true, "pins": []}'
+    status_updates = []
+
+    def mock_generate_content(model, contents, config):
+        if model == "gemini-3.6-flash":
+            raise Exception("429 RESOURCE_EXHAUSTED: Rate limit exceeded")
+        return mock_resp_success
+
+    client._client.models.generate_content = mock_generate_content
+
+    with patch("time.sleep", return_value=None):
+        resp = client.generate_json(
+            prompt="Build ALU",
+            status_callback=lambda msg: status_updates.append(msg)
+        )
+
+    assert resp["success"] is True
+    assert resp["data"] == {"success": True, "pins": []}
+    assert any("rate limit reached" in msg for msg in status_updates)
+    assert any("Switching from gemini-3.6-flash to fallback gemini-2.5-flash" in msg for msg in status_updates)
+
+    print(f"[PASS] GeminiClient Resilience test passed (Timeout 45s, 429 auto-backoff & fallback verified)")
+
+
 if __name__ == "__main__":
     print("Running AI Logisim Controller Test Suite...")
     test_circ_builder()
@@ -397,6 +432,7 @@ if __name__ == "__main__":
     test_normalization()
     test_multi_circuit()
     test_planner_agent()
+    test_gemini_client_resilience()
     test_server_endpoints()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
