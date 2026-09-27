@@ -2,7 +2,7 @@
 ; Compiles a single-file professional setup installer: LogiMate-Setup-v1.0.0.exe
 
 #define MyAppName "LogiMate"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "LogiMate AI"
 #define MyAppURL "https://github.com/mahadahmedpalla/LogiMate"
 #define MyAppExeName "AI_Logisim_Controller.exe"
@@ -20,7 +20,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=dist_installer
-OutputBaseFilename=LogiMate-Setup-v1.0.0
+OutputBaseFilename=LogiMate-Setup-v1.2.0
 SetupIconFile=app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max
