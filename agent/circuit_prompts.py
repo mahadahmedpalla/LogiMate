@@ -100,8 +100,15 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
   - Select port is at (x-20, y+20) (bit width = select_bits, e.g. 1 for 2:1, 2 for 4:1).
   - Data inputs:
     - For 2:1 (select_bits=1): In0 at (x-30, y-10), In1 at (x-30, y+10).
-    - For 4:1 (select_bits=2): In0 at (x-40, y-20), In1 at (x-40, y-10), In2 at (x-40, y), In3 at (x-40, y+10).
-  - CRITICAL: Each MUX data input must connect to ONE distinct source/gate output. NEVER join multiple gate outputs together into the same wire or terminal (which causes red-wire contention!).
+    - For 4:1 (select_bits=2) at loc=(x, y):
+      - In0 at (x-40, y-20)
+      - In1 at (x-40, y-10)
+      - In2 at (x-40, y)
+      - In3 at (x-40, y+10)
+  - CRITICAL ROUTING TO MUX INPUTS (Prevent Red-Wire Contention):
+    - Each MUX data input must connect to ONE distinct source/gate output.
+    - When routing parallel gate/arithmetic outputs into MUX inputs, EACH wire must take its vertical turn at a DIFFERENT intermediate X coordinate (staggered X offsets, e.g. jog_x = x-100, x-90, x-80, x-70) before extending horizontally into its target MUX terminal (x-40, target_y).
+    - NEVER let multiple gate output wires share the same intermediate X coordinate, as this shorts the gate outputs together into a red wire!
 - Priority Encoder (Plexers, loc=(x, y)):
   - select: bit width of output code. select=2 for 4-to-2 encoder (4 inputs D0..D3), select=3 for 8-to-3 (8 inputs D0..D7).
   - Inputs D0..D(n-1) are on the left side (x-40), vertically spaced by 10 starting at y - 5*n + 10.

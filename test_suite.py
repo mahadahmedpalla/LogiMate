@@ -196,6 +196,42 @@ def test_width_aware_snapping():
     print("[PASS] Width-Aware Snapping test passed (1-bit c_out and 8-bit trunk protected from incompatible shorts)")
 
 
+def test_mux_4to1_snapping():
+    b = CircuitBuilder("test_mux_snap")
+    # 4:1 MUX at (380, 200), select=2, width=8
+    # Terminals: in0=(340, 180), in1=(340, 190), in2=(340, 200), in3=(340, 210)
+    b.add_component("Multiplexer", 380, 200, attrs={"select": "2", "width": "8"})
+
+    # 4 Wires ending 20px short at x=320 with staggered vertical trunks
+    b.add_wire((240, 100), (280, 100))
+    b.add_wire((280, 100), (280, 180))
+    b.add_wire((280, 180), (320, 180)) # 20px short of (340, 180)
+
+    b.add_wire((240, 180), (290, 180))
+    b.add_wire((290, 180), (290, 190))
+    b.add_wire((290, 190), (320, 190)) # 20px short of (340, 190)
+
+    b.add_wire((240, 260), (300, 260))
+    b.add_wire((300, 260), (300, 200))
+    b.add_wire((300, 200), (320, 200)) # 20px short of (340, 200)
+
+    b.add_wire((240, 340), (310, 340))
+    b.add_wire((310, 340), (310, 210))
+    b.add_wire((310, 210), (320, 210)) # 20px short of (340, 210)
+
+    xml = b.to_xml()
+    root = ET.fromstring(xml)
+    wires = root.find("circuit").findall("wire")
+    wire_points = set()
+    for w in wires:
+        wire_points.add(w.attrib["from"])
+        wire_points.add(w.attrib["to"])
+
+    expected = {"(340,180)", "(340,190)", "(340,200)", "(340,210)"}
+    assert expected.issubset(wire_points), f"Missing MUX terminals: {expected - wire_points}"
+    print("[PASS] 4:1 Multiplexer Snapping test passed (all 4 data inputs snapped cleanly without overlaps)")
+
+
 def test_driver():
     driver = LogisimDriver()
     # Should safely report connection status without error
@@ -212,6 +248,7 @@ if __name__ == "__main__":
     test_priority_encoder()
     test_normalization()
     test_width_aware_snapping()
+    test_mux_4to1_snapping()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
 

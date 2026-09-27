@@ -243,7 +243,7 @@ def get_component_port_specs(comp: CircuitComponent) -> List[ComponentPort]:
         else:
             dy = -(num_inputs // 2) * 10
             for i in range(num_inputs):
-                ports.append(ComponentPort(x - 40, dy + 10 * i, data_width, "in", f"in{i}"))
+                ports.append(ComponentPort(x - 40, y + dy + 10 * i, data_width, "in", f"in{i}"))
     elif name == "Demultiplexer":
         data_width = int(attrs.get("width", 1))
         select_bits = int(attrs.get("select", 1))
