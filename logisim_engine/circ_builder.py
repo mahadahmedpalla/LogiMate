@@ -827,6 +827,172 @@ class CircuitBuilder:
             self.wires.append(Wire((x1, y1), (mid_x, mid_y)))
             self.wires.append(Wire((mid_x, mid_y), (x2, y2)))
 
+    def sanitize_cross_width_wires(self) -> int:
+        """
+        Electrical Rules Check (ERC) Cross-Width Sanitizer:
+        Analyzes connected electrical nets across the circuit. If any wire net
+        bridges terminals of conflicting known bit-widths (e.g. connecting an 8-bit
+        data bus/gate to a 2-bit OpCode pin or a 1-bit control port), uses multi-source
+        BFS Voronoi partitioning to identify and sever the illegal cross-domain bridge
+        wire segment(s).
+        Guarantees that no wire net in the final Logisim XML contains incompatible bit widths.
+        """
+        if not self.wires or not self.components:
+            return 0
+
+        def is_point_on_segment(pt: Tuple[int, int], p1: Tuple[int, int], p2: Tuple[int, int]) -> bool:
+            px, py = pt
+            x1, y1 = p1
+            x2, y2 = p2
+            if x1 == x2 == px and min(y1, y2) <= py <= max(y1, y2):
+                return True
+            if y1 == y2 == py and min(x1, x2) <= px <= max(x1, x2):
+                return True
+            return False
+
+        all_port_specs: List[ComponentPort] = []
+        for c in self.components:
+            all_port_specs.extend(get_component_port_specs(c))
+        port_spec_map: Dict[Tuple[int, int], ComponentPort] = {
+            (p.x, p.y): p for p in all_port_specs if p.width > 0
+        }
+
+        wires = list(self.wires)
+        wire_adj: Dict[int, List[int]] = collections.defaultdict(list)
+        for i in range(len(wires)):
+            w1 = wires[i]
+            for j in range(i + 1, len(wires)):
+                w2 = wires[j]
+                if (w1.from_pos in (w2.from_pos, w2.to_pos) or
+                    w1.to_pos in (w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w1.from_pos, w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w1.to_pos, w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w2.from_pos, w1.from_pos, w1.to_pos) or
+                    is_point_on_segment(w2.to_pos, w1.from_pos, w1.to_pos)):
+                    wire_adj[i].append(j)
+                    wire_adj[j].append(i)
+
+        visited_wires = set()
+        total_severed = 0
+        reconstructed_wires: List[Wire] = []
+
+        for i in range(len(wires)):
+            if i in visited_wires:
+                continue
+            queue = collections.deque([i])
+            visited_wires.add(i)
+            current_net_wires = []
+            while queue:
+                curr = queue.popleft()
+                current_net_wires.append(curr)
+                for neighbor in wire_adj[curr]:
+                    if neighbor not in visited_wires:
+                        visited_wires.add(neighbor)
+                        queue.append(neighbor)
+
+            # Find all ports touched by this net
+            net_ports = []
+            for w_idx in current_net_wires:
+                w = wires[w_idx]
+                for pt in (w.from_pos, w.to_pos):
+                    if pt in port_spec_map:
+                        net_ports.append((pt, port_spec_map[pt]))
+                for pt, ps in port_spec_map.items():
+                    if is_point_on_segment(pt, w.from_pos, w.to_pos):
+                        net_ports.append((pt, ps))
+
+            width_set = set(ps.width for pt, ps in net_ports)
+            if len(width_set) <= 1:
+                for w_idx in current_net_wires:
+                    reconstructed_wires.append(wires[w_idx])
+                continue
+
+            # Multi-width conflict detected on this net!
+            logger.warning(f"ERC: Incompatible widths detected on net: {width_set}. Sanitizing cross-width bridge wires.")
+
+            # Collect all vertices in this net
+            net_all_pts = set(pt for pt, ps in net_ports)
+            for w_idx in current_net_wires:
+                w = wires[w_idx]
+                net_all_pts.add(w.from_pos)
+                net_all_pts.add(w.to_pos)
+
+            # Build point-to-point adjacency for this net
+            pt_adj = collections.defaultdict(set)
+            for w_idx in current_net_wires:
+                w = wires[w_idx]
+                p1, p2 = w.from_pos, w.to_pos
+                pts_on_w = [pt for pt in net_all_pts if is_point_on_segment(pt, p1, p2)]
+                if p1[0] == p2[0]:
+                    pts_on_w.sort(key=lambda p: p[1])
+                else:
+                    pts_on_w.sort(key=lambda p: p[0])
+                pts_on_w = list(dict.fromkeys(pts_on_w))
+                for k in range(len(pts_on_w) - 1):
+                    u, v = pts_on_w[k], pts_on_w[k + 1]
+                    if u != v:
+                        pt_adj[u].add(v)
+                        pt_adj[v].add(u)
+
+            # Multi-source BFS Voronoi domain coloring
+            dist = {}
+            domain = {}
+            bfs_q = collections.deque()
+
+            for pt, ps in net_ports:
+                dist[pt] = 0
+                domain[pt] = ps.width
+                bfs_q.append(pt)
+
+            while bfs_q:
+                curr = bfs_q.popleft()
+                curr_d = dist[curr]
+                curr_dom = domain[curr]
+                for nxt in pt_adj[curr]:
+                    if nxt not in dist:
+                        dist[nxt] = curr_d + 1
+                        domain[nxt] = curr_dom
+                        bfs_q.append(nxt)
+
+            # Reconstruct net wires, omitting cross-domain segments
+            for w_idx in current_net_wires:
+                w = wires[w_idx]
+                p1, p2 = w.from_pos, w.to_pos
+                pts_on_w = [pt for pt in net_all_pts if is_point_on_segment(pt, p1, p2)]
+                if p1[0] == p2[0]:
+                    pts_on_w.sort(key=lambda p: p[1])
+                else:
+                    pts_on_w.sort(key=lambda p: p[0])
+                pts_on_w = list(dict.fromkeys(pts_on_w))
+                if pts_on_w and (pts_on_w[0] != p1 or pts_on_w[-1] != p2):
+                    if (p1[0] == p2[0] and p1[1] > p2[1]) or (p1[1] == p2[1] and p1[0] > p2[0]):
+                        pts_on_w.reverse()
+
+                for k in range(len(pts_on_w) - 1):
+                    u, v = pts_on_w[k], pts_on_w[k + 1]
+                    if u == v:
+                        continue
+                    dom_u = domain.get(u)
+                    dom_v = domain.get(v)
+                    if dom_u is not None and dom_v is not None and dom_u == dom_v:
+                        reconstructed_wires.append(Wire(u, v))
+                    else:
+                        total_severed += 1
+                        logger.info(f"ERC: Severed illegal cross-domain wire segment {u} ({dom_u}-bit) -> {v} ({dom_v}-bit)")
+
+        if total_severed > 0:
+            seen_wires = set()
+            deduped_wires: List[Wire] = []
+            for w in reconstructed_wires:
+                key = (min(w.from_pos, w.to_pos), max(w.from_pos, w.to_pos))
+                if key not in seen_wires:
+                    seen_wires.add(key)
+                    deduped_wires.append(w)
+            self.wires = deduped_wires
+            logger.info(f"ERC Sanitizer: safely pruned {total_severed} cross-width bridge wire segment(s).")
+
+        return total_severed
+
     def snap_and_bridge_wire_gaps(self, max_snap_distance: int = 40) -> int:
         """
         Deterministic, Width-Aware Wire Gap Snapper & Bridge.
@@ -1069,7 +1235,9 @@ class CircuitBuilder:
 
     def to_xml(self) -> str:
         """Generates full, valid Logisim 2.7.1 XML document string."""
+        self.sanitize_cross_width_wires()
         self.snap_and_bridge_wire_gaps()
+        self.sanitize_cross_width_wires()
         root = ET.Element("project", source="2.7.1", version="1.0")
 
 

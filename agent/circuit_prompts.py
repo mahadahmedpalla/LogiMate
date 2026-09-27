@@ -63,9 +63,10 @@ Available Actions:
    }
 
 Logisim 2.7.1 Component Coordinate & Terminal Rules:
-- Pins:
+- Primary Input & Output Pin Placement:
+  - ALL primary circuit input pins (e.g. data inputs A, B, control inputs OpCode, Select, Clock, Reset, Cin) MUST be placed on the far left column of the canvas (column x = 80 or 100), stacked vertically with clean spacing (e.g. y = 80, 140, 200, 280...). NEVER place input pins inside the logic gate columns or between components!
   - Input pin: loc=(x, y), wire connects at (x, y). facing="east".
-  - Output pin: loc=(x, y), wire connects at (x, y). facing="west".
+  - ALL primary circuit output pins (e.g. ALU_Out, Result, Cout, Q) MUST be placed on the far right column of the canvas (e.g. x = 500 or 580), facing "west". Wire connects at (x, y).
 - Standard Gates (facing "east"):
   - loc=(x, y) is the gate's output tip.
   - 2-input gate (size 50): input 1 at (x-50, y-20), input 2 at (x-50, y+20).
@@ -109,6 +110,13 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
     - Each MUX data input must connect to ONE distinct source/gate output.
     - When routing parallel gate/arithmetic outputs into MUX inputs, EACH wire must take its vertical turn at a DIFFERENT intermediate X coordinate (staggered X offsets, e.g. jog_x = x-100, x-90, x-80, x-70) before extending horizontally into its target MUX terminal (x-40, target_y).
     - NEVER let multiple gate output wires share the same intermediate X coordinate, as this shorts the gate outputs together into a red wire!
+  - ALU Architecture & Multiplexed Operations:
+    - In an ALU or multiplexed unit:
+      - Primary data inputs (A, B) feed all parallel arithmetic/logic gates (Adder, AND, OR, XOR, etc.).
+      - Each operation output connects DIRECTLY to its designated Multiplexer data input (e.g. Op 00 -> In0, Op 01 -> In1, Op 10 -> In2, Op 11 -> In3).
+      - The `OpCode` or `Select` pin is strictly a control input placed on the far left column (e.g. at [100, 320]).
+      - It connects EXCLUSIVELY to the Multiplexer `select` terminal at (mux_x - 20, mux_y + 20).
+      - `OpCode` is NEVER an operation result; NEVER connect any logic gate output, arithmetic output, or MUX data input to the `OpCode` pin!
 - Priority Encoder (Plexers, loc=(x, y)):
   - select: bit width of output code. select=2 for 4-to-2 encoder (4 inputs D0..D3), select=3 for 8-to-3 (8 inputs D0..D7).
   - Inputs D0..D(n-1) are on the left side (x-40), vertically spaced by 10 starting at y - 5*n + 10.

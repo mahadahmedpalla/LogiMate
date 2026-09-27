@@ -240,6 +240,44 @@ def test_driver():
     print(f"[PASS] LogisimDriver test passed (connected={info['connected']})")
 
 
+def test_erc_cross_width_pruning():
+    b = CircuitBuilder("test_erc_alu")
+    b.add_pin("A", 100, 100, width=8)
+    b.add_pin("B", 100, 200, width=8)
+    b.add_pin("OpCode", 280, 360, width=2)
+    b.add_component("XOR Gate", 240, 360, attrs={"width": "8", "inputs": "2", "size": "50"})
+    b.add_component("Multiplexer", 380, 200, attrs={"select": "2", "width": "8"})
+
+    # Raw Gemini wires containing illegal cross-width bridges:
+    # 1. 8-bit XOR to 2-bit OpCode
+    b.add_wire((240, 360), (280, 360))
+    # 2. 2-bit OpCode to 8-bit MUX In3
+    b.add_wire((280, 360), (340, 210))
+    # 3. 2-bit OpCode to 2-bit MUX Select (valid!)
+    b.add_wire((280, 360), (360, 220))
+
+    xml = b.to_xml()
+    root = ET.fromstring(xml)
+    wires = root.find("circuit").findall("wire")
+
+    # Verify that illegal cross-width bridges were severed
+    for w in wires:
+        p1, p2 = w.attrib["from"], w.attrib["to"]
+        pts = {p1, p2}
+        assert not ("(240,360)" in pts and "(280,360)" in pts), "ERROR: Illegal 8-bit to 2-bit bridge was not pruned!"
+        assert not ("(340,210)" in pts and "(280,360)" in pts), "ERROR: Illegal 2-bit to 8-bit bridge was not pruned!"
+
+    # Verify that the 2-bit OpCode connects to MUX select (360, 220)
+    wire_points = set()
+    for w in wires:
+        wire_points.add(w.attrib["from"])
+        wire_points.add(w.attrib["to"])
+    assert "(360,220)" in wire_points, "ERROR: Valid 2-bit MUX select wire was lost!"
+    assert "(280,360)" in wire_points, "ERROR: Valid OpCode pin connection was lost!"
+
+    print("[PASS] Electrical Rules Check (ERC) test passed (illegal cross-width bridges severed, valid nets preserved)")
+
+
 if __name__ == "__main__":
     print("Running AI Logisim Controller Test Suite...")
     test_circ_builder()
@@ -249,6 +287,7 @@ if __name__ == "__main__":
     test_normalization()
     test_width_aware_snapping()
     test_mux_4to1_snapping()
+    test_erc_cross_width_pruning()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
 
