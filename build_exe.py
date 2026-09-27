@@ -57,12 +57,19 @@ def build():
             pass
 
     ui_dest = os.path.join(dist_dir, "ui")
-    if not os.path.exists(ui_dest):
-        shutil.copytree("ui", ui_dest, dirs_exist_ok=True)
-        print("Copied ui to dist/AI_Logisim_Controller/ui")
+    shutil.copytree("ui", ui_dest, dirs_exist_ok=True)
+    print("Copied updated ui to dist/AI_Logisim_Controller/ui")
 
     icon_dest = os.path.join(dist_dir, "app_icon.ico")
     shutil.copy2("app_icon.ico", icon_dest)
+
+    # Clean any local user credentials or test circuits from distribution bundle
+    dist_config = os.path.join(dist_dir, "config.json")
+    if os.path.exists(dist_config):
+        os.remove(dist_config)
+    dist_output = os.path.join(dist_dir, "output")
+    if os.path.exists(dist_output):
+        shutil.rmtree(dist_output, ignore_errors=True)
 
     print("\n" + "=" * 65)
     print("  SUCCESS: Standalone Desktop App Built!")
