@@ -160,6 +160,42 @@ def test_normalization():
     print(f"[PASS] Normalization test passed (Full Adder -> Adder, radix 10 -> 10signed)")
 
 
+def test_width_aware_snapping():
+    b = CircuitBuilder("test_width_snap")
+    # 8-bit Adder at (220, 80): IN0 (180, 70)[8], IN1 (180, 90)[8], OUT (220, 80)[8], c_in (200, 60)[1], c_out (200, 100)[1]
+    b.add_arithmetic("Adder", 220, 80, width=8)
+
+    # 1. 8-bit input pin B: wire ending at (190, 100), 10px from 1-bit c_out at (200, 100)
+    b.add_pin("B", 80, 100, width=8)
+    b.add_wire((80, 100), (190, 100))
+
+    # 2. 2-bit OpCode pin: wire ending at (130, 200), 10px from 8-bit vertical trunk at x=140
+    b.add_pin("OpCode", 80, 200, width=2)
+    b.add_wire((80, 200), (130, 200))
+
+    # 3. 8-bit vertical trunk at x=140
+    b.add_pin("Data_Trunk", 80, 50, width=8)
+    b.add_wire((80, 50), (140, 50))
+    b.add_wire((140, 50), (140, 250))
+
+    xml = b.to_xml()
+    root = ET.fromstring(xml)
+    wires = root.find("circuit").findall("wire")
+    wire_points = set()
+    for w in wires:
+        wire_points.add(w.attrib["from"])
+        wire_points.add(w.attrib["to"])
+
+    # Verify that the 8-bit wire was NEVER snapped to 1-bit c_out (200, 100)
+    assert "(200,100)" not in wire_points, "ERROR: 8-bit bus was incorrectly snapped to 1-bit c_out!"
+
+    # Verify that the 2-bit wire was NEVER snapped to the 8-bit trunk at (140, 200)
+    assert not any(w.attrib.get("from") == "(80,200)" and w.attrib.get("to") == "(140,200)" for w in wires), \
+        "ERROR: 2-bit OpCode was incorrectly merged into the 8-bit data trunk!"
+
+    print("[PASS] Width-Aware Snapping test passed (1-bit c_out and 8-bit trunk protected from incompatible shorts)")
+
+
 def test_driver():
     driver = LogisimDriver()
     # Should safely report connection status without error
@@ -175,7 +211,9 @@ if __name__ == "__main__":
     test_wire_snapping()
     test_priority_encoder()
     test_normalization()
+    test_width_aware_snapping()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
+
 
 

@@ -82,7 +82,8 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
   - CRITICAL: In Logisim Library 3, the multi-bit / full adder component is strictly named "Adder" (not "Full Adder"). It already provides complete full-adder functionality (Inputs A & B, Carry-in at x-20, y-20, Sum out at x, y, Carry-out at x-20, y+20) for widths 1..32.
   - loc=(x, y) is the Sum or Difference output.
   - Input A at (x-40, y-10), Input B at (x-40, y+10).
-  - Carry/Borrow-in at (x-20, y-20), Carry/Borrow-out at (x-20, y+20).
+  - Carry/Borrow-in at (x-20, y-20) [ALWAYS 1-bit], Carry/Borrow-out at (x-20, y+20) [ALWAYS 1-bit].
+  - CRITICAL: Multi-bit data buses (A, B, Sum) must NEVER connect to Carry terminals. Carry terminals are strictly 1-bit!
 - Multiplier & Divider (Arithmetic, loc=(x, y)):
   - loc=(x, y) is the Product or Quotient output.
   - Input A at (x-40, y-10), Input B at (x-40, y+10).
@@ -94,9 +95,13 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
     - Stem: (160, 160)
     - Arm 0 (bits 0..15): (180, 140)
     - Arm 1 (bits 16..31): (180, 150)
-- Multiplexer:
-  - loc=(x, y) is output.
-  - Data inputs at (x-40, y-10) and (x-40, y+10) for 2:1. Select at (x-20, y+20).
+- Multiplexer (Plexers, loc=(x, y)):
+  - loc=(x, y) is output (data width).
+  - Select port is at (x-20, y+20) (bit width = select_bits, e.g. 1 for 2:1, 2 for 4:1).
+  - Data inputs:
+    - For 2:1 (select_bits=1): In0 at (x-30, y-10), In1 at (x-30, y+10).
+    - For 4:1 (select_bits=2): In0 at (x-40, y-20), In1 at (x-40, y-10), In2 at (x-40, y), In3 at (x-40, y+10).
+  - CRITICAL: Each MUX data input must connect to ONE distinct source/gate output. NEVER join multiple gate outputs together into the same wire or terminal (which causes red-wire contention!).
 - Priority Encoder (Plexers, loc=(x, y)):
   - select: bit width of output code. select=2 for 4-to-2 encoder (4 inputs D0..D3), select=3 for 8-to-3 (8 inputs D0..D7).
   - Inputs D0..D(n-1) are on the left side (x-40), vertically spaced by 10 starting at y - 5*n + 10.
@@ -154,4 +159,7 @@ CRITICAL RULES:
 - NEVER refuse a circuit request by claiming you only support single-bit or basic gates. You have full advanced capability to synthesize multi-bit buses, splitters, ALUs, multiplexers, and registers!
 - Always pair `build_custom_circuit` or `build_template` with `open_in_logisim` so the result immediately appears on the user's Logisim desktop canvas.
 - Ensure all wire coordinates align precisely with the terminal rules above.
+- BUS ISOLATION & BIT WIDTH INTEGRITY:
+  - Multi-bit data buses (e.g. 8-bit, 16-bit A, B, Sum) and control lines (1-bit Carry/Clock/Reset or 2-bit OpCode/Select) must NEVER share coordinate lines or vertical routing trunks.
+  - Route control lines on separate coordinate columns outside data trunks, or use Tunnels (e.g. {"type": "Tunnel", "loc": [x, y], "label": "T1", "width": width}) to route buses cleanly across the canvas without wire crossing conflicts!
 """

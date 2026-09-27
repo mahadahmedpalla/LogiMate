@@ -99,149 +99,206 @@ class CircuitComponent:
     ports: List[Tuple[int, int]] = field(default_factory=list)
 
 
-def get_component_ports(comp: CircuitComponent) -> List[Tuple[int, int]]:
-    """
-    Computes all exact canvas terminal coordinates (px, py) for a Logisim component
-    based on its library, canonical name, position, and attributes.
-    """
-    if comp.ports:
-        return list(comp.ports)
+@dataclass
+class ComponentPort:
+    x: int
+    y: int
+    width: int           # Bit width (1, 2, 4, 8, etc., or 0 for flexible/unknown)
+    role: str            # 'in', 'out', 'c_in', 'c_out', 'select', 'clock', 'clear', 'enable', etc.
+    name: str = ""       # Terminal label or role name
 
-    ports: List[Tuple[int, int]] = []
+
+def get_component_port_specs(comp: CircuitComponent) -> List[ComponentPort]:
+    """
+    Computes all exact canvas terminal coordinates (px, py), bit widths, and roles
+    for a Logisim component based on its library, canonical name, position, and attributes.
+    """
+    ports: List[ComponentPort] = []
     x, y = comp.x, comp.y
     name = comp.name
     attrs = comp.attrs
 
     if name == "Pin":
-        ports.append((x, y))
+        width = int(attrs.get("width", 1))
+        is_output = attrs.get("output", "false").lower() == "true"
+        role = "out" if is_output else "in"
+        ports.append(ComponentPort(x, y, width, role, attrs.get("label", "pin")))
     elif name == "Comparator":
-        # Inputs: IN0 (top-left), IN1 (bottom-left)
-        # Outputs: GT (top-right '>'), EQ (middle-right '='), LT (bottom-right '<')
+        # Inputs: IN0 (top-left), IN1 (bottom-left) -> width
+        # Outputs: GT (top-right '>'), EQ (middle-right '='), LT (bottom-right '<') -> 1 bit
+        data_width = int(attrs.get("width", 8))
         ports.extend([
-            (x - 40, y - 10),
-            (x - 40, y + 10),
-            (x, y - 10),
-            (x, y),
-            (x, y + 10),
+            ComponentPort(x - 40, y - 10, data_width, "in", "A"),
+            ComponentPort(x - 40, y + 10, data_width, "in", "B"),
+            ComponentPort(x, y - 10, 1, "out", "GT"),
+            ComponentPort(x, y, 1, "out", "EQ"),
+            ComponentPort(x, y + 10, 1, "out", "LT"),
         ])
     elif name in ("Adder", "Subtractor", "Multiplier"):
+        data_width = int(attrs.get("width", 8))
         ports.extend([
-            (x - 40, y - 10),
-            (x - 40, y + 10),
-            (x, y),
-            (x - 20, y - 20),
-            (x - 20, y + 20),
+            ComponentPort(x - 40, y - 10, data_width, "in", "A"),
+            ComponentPort(x - 40, y + 10, data_width, "in", "B"),
+            ComponentPort(x, y, data_width, "out", "Sum"),
+            ComponentPort(x - 20, y - 20, 1, "in", "c_in"),
+            ComponentPort(x - 20, y + 20, 1, "out", "c_out"),
         ])
     elif name == "Divider":
+        data_width = int(attrs.get("width", 8))
         ports.extend([
-            (x - 40, y - 10),
-            (x - 40, y + 10),
-            (x, y),
-            (x - 20, y - 20),
-            (x - 20, y + 20),
+            ComponentPort(x - 40, y - 10, data_width, "in", "A"),
+            ComponentPort(x - 40, y + 10, data_width, "in", "B"),
+            ComponentPort(x, y, data_width, "out", "Quotient"),
+            ComponentPort(x - 20, y - 20, data_width, "in", "Upper"),
+            ComponentPort(x - 20, y + 20, data_width, "out", "Remainder"),
         ])
-    elif name == "Negator":
-        ports.extend([(x - 40, y), (x, y)])
+    elif name in ("Negator", "Bit Extender"):
+        data_width = int(attrs.get("width", 8))
+        ports.extend([
+            ComponentPort(x - 40, y, data_width, "in", "in"),
+            ComponentPort(x, y, data_width, "out", "out"),
+        ])
     elif name == "Shifter":
-        ports.extend([(x - 40, y - 10), (x - 40, y + 10), (x, y)])
-    elif name == "Bit Extender":
-        ports.extend([(x - 40, y), (x, y)])
+        data_width = int(attrs.get("width", 8))
+        shift_bits = max(1, (data_width - 1).bit_length())
+        ports.extend([
+            ComponentPort(x - 40, y - 10, data_width, "in", "in"),
+            ComponentPort(x - 40, y + 10, shift_bits, "in", "shift"),
+            ComponentPort(x, y, data_width, "out", "out"),
+        ])
     elif "Gate" in name or name == "Buffer":
-        ports.append((x, y))
+        data_width = int(attrs.get("width", 1))
         inputs = int(attrs.get("inputs", 2))
         size = int(attrs.get("size", 50))
+        ports.append(ComponentPort(x, y, data_width, "out", "out"))
         if "NOT" in name:
-            ports.append((x - 30, y))
+            ports.append(ComponentPort(x - 30, y, data_width, "in", "in"))
         elif inputs == 2:
-            ports.extend([(x - size, y - 20), (x - size, y + 20)])
+            ports.extend([
+                ComponentPort(x - size, y - 20, data_width, "in", "in0"),
+                ComponentPort(x - size, y + 20, data_width, "in", "in1"),
+            ])
         elif inputs == 3:
-            ports.extend([(x - size, y - 20), (x - size, y), (x - size, y + 20)])
+            ports.extend([
+                ComponentPort(x - size, y - 20, data_width, "in", "in0"),
+                ComponentPort(x - size, y, data_width, "in", "in1"),
+                ComponentPort(x - size, y + 20, data_width, "in", "in2"),
+            ])
         elif inputs == 4:
             ports.extend([
-                (x - size, y - 20),
-                (x - size, y - 10),
-                (x - size, y + 10),
-                (x - size, y + 20),
+                ComponentPort(x - size, y - 20, data_width, "in", "in0"),
+                ComponentPort(x - size, y - 10, data_width, "in", "in1"),
+                ComponentPort(x - size, y + 10, data_width, "in", "in2"),
+                ComponentPort(x - size, y + 20, data_width, "in", "in3"),
             ])
         else:
             for i in range(inputs):
-                ports.append((x - size, y + int((i - (inputs - 1) / 2) * 10)))
+                ports.append(ComponentPort(x - size, y + int((i - (inputs - 1) / 2) * 10), data_width, "in", f"in{i}"))
     elif name == "Register":
+        data_width = int(attrs.get("width", 8))
         ports.extend([
-            (x, y),             # Q
-            (x - 30, y),        # D
-            (x - 20, y + 20),   # Clock
-            (x - 10, y + 20),   # Clear
-            (x - 30, y + 10),   # Enable
+            ComponentPort(x, y, data_width, "out", "Q"),
+            ComponentPort(x - 30, y, data_width, "in", "D"),
+            ComponentPort(x - 20, y + 20, 1, "in", "clock"),
+            ComponentPort(x - 10, y + 20, 1, "in", "clear"),
+            ComponentPort(x - 30, y + 10, 1, "in", "enable"),
         ])
     elif name == "Counter":
+        data_width = int(attrs.get("width", 8))
         ports.extend([
-            (x, y),             # Q
-            (x - 30, y),        # Data In
-            (x - 20, y + 20),   # Clock
-            (x - 10, y + 20),   # Clear
-            (x - 30, y - 10),   # Load
-            (x - 30, y + 10),   # Count enable
-            (x, y + 10),        # Carry
+            ComponentPort(x, y, data_width, "out", "Q"),
+            ComponentPort(x - 30, y, data_width, "in", "Data"),
+            ComponentPort(x - 20, y + 20, 1, "in", "clock"),
+            ComponentPort(x - 10, y + 20, 1, "in", "clear"),
+            ComponentPort(x - 30, y - 10, 1, "in", "load"),
+            ComponentPort(x - 30, y + 10, 1, "in", "count_en"),
+            ComponentPort(x, y + 10, 1, "out", "carry"),
         ])
     elif name in ("D Flip-Flop", "T Flip-Flop"):
         ports.extend([
-            (x - 40, y),        # D / T
-            (x - 40, y + 20),   # Clock
-            (x, y),             # Q
-            (x, y + 20),        # ~Q
-            (x - 20, y + 30),   # Reset
+            ComponentPort(x - 40, y, 1, "in", "D"),
+            ComponentPort(x - 40, y + 20, 1, "in", "clock"),
+            ComponentPort(x, y, 1, "out", "Q"),
+            ComponentPort(x, y + 20, 1, "out", "notQ"),
+            ComponentPort(x - 20, y + 30, 1, "in", "reset"),
         ])
     elif name == "J-K Flip-Flop":
         ports.extend([
-            (x - 40, y),        # J
-            (x - 40, y + 10),   # Clock
-            (x - 40, y + 20),   # K
-            (x, y),             # Q
-            (x, y + 20),        # ~Q
-            (x - 20, y + 30),   # Reset
+            ComponentPort(x - 40, y, 1, "in", "J"),
+            ComponentPort(x - 40, y + 10, 1, "in", "clock"),
+            ComponentPort(x - 40, y + 20, 1, "in", "K"),
+            ComponentPort(x, y, 1, "out", "Q"),
+            ComponentPort(x, y + 20, 1, "out", "notQ"),
+            ComponentPort(x - 20, y + 30, 1, "in", "reset"),
         ])
     elif name == "Multiplexer":
-        ports.append((x, y))           # Output
-        ports.append((x - 20, y + 20)) # Select
+        data_width = int(attrs.get("width", 1))
         select_bits = int(attrs.get("select", 1))
-        num_inputs = 2 ** select_bits
-        for i in range(num_inputs):
-            in_y = y - 10 + i * 20 if num_inputs == 2 else y - (num_inputs * 10 // 2) + i * 10
-            ports.append((x - 40, in_y))
+        num_inputs = 1 << select_bits
+        ports.append(ComponentPort(x, y, data_width, "out", "out"))
+        ports.append(ComponentPort(x - 20, y + 20, select_bits, "in", "select"))
+        if num_inputs == 2:
+            ports.append(ComponentPort(x - 30, y - 10, data_width, "in", "in0"))
+            ports.append(ComponentPort(x - 30, y + 10, data_width, "in", "in1"))
+        else:
+            dy = -(num_inputs // 2) * 10
+            for i in range(num_inputs):
+                ports.append(ComponentPort(x - 40, dy + 10 * i, data_width, "in", f"in{i}"))
     elif name == "Demultiplexer":
-        ports.append((x, y))           # Input
-        ports.append((x + 20, y + 20)) # Select
-        ports.extend([(x + 30, y - 10), (x + 30, y + 10)])
+        data_width = int(attrs.get("width", 1))
+        select_bits = int(attrs.get("select", 1))
+        outputs = 1 << select_bits
+        ports.append(ComponentPort(x, y, data_width, "in", "in"))
+        ports.append(ComponentPort(x + 20, y + 20, select_bits, "in", "select"))
+        for i in range(outputs):
+            ports.append(ComponentPort(x + 30, y - 10 + i * 20, data_width, "out", f"out{i}"))
     elif name == "Decoder":
-        ports.append((x, y))           # Select
-        ports.extend([(x + 30, y - 10), (x + 30, y + 10)])
+        select_bits = int(attrs.get("select", 1))
+        outputs = 1 << select_bits
+        ports.append(ComponentPort(x, y, select_bits, "in", "select"))
+        for i in range(outputs):
+            ports.append(ComponentPort(x + 30, y - 10 + i * 20, 1, "out", f"out{i}"))
     elif name == "Priority Encoder":
         select_bits = int(attrs.get("select", 3))
         n = 1 << select_bits
         y_start = y - 5 * n + 10
-        # Data inputs D0..D(n-1) on left side (facing east)
         for i in range(n):
-            ports.append((x - 40, y_start + 10 * i))
-        # Code OUT (select bits) at (x, y)
-        ports.append((x, y))
-        # Group Signal GS (AnyActive, 1 bit) at (x, y + 10)
-        ports.append((x, y + 10))
-        # Enable Out at (x - 20, y_start - 10)
-        ports.append((x - 20, y_start - 10))
-        # Enable In at (x - 20, y_start + 10 * n)
-        ports.append((x - 20, y_start + 10 * n))
+            ports.append(ComponentPort(x - 40, y_start + 10 * i, 1, "in", f"D{i}"))
+        ports.append(ComponentPort(x, y, select_bits, "out", "out"))
+        ports.append(ComponentPort(x, y + 10, 1, "out", "GS"))
+        ports.append(ComponentPort(x - 20, y_start - 10, 1, "out", "EO"))
+        ports.append(ComponentPort(x - 20, y_start + 10 * n, 1, "in", "EI"))
     elif name == "Splitter":
-        ports.append((x, y))           # Stem
+        incoming = int(attrs.get("incoming", attrs.get("width", 2)))
         fanout = int(attrs.get("fanout", 2))
+        ports.append(ComponentPort(x, y, incoming, "stem", "stem"))
         for k in range(fanout):
-            ports.append((x + 20, y - (fanout - k) * 10))
-    elif name in ("Probe", "Tunnel", "Constant", "Clock", "Ground", "Power"):
-        ports.append((x, y))
+            ports.append(ComponentPort(x + 20, y - (fanout - k) * 10, 0, "arm", f"arm{k}"))
+    elif name in ("Constant", "Tunnel"):
+        width = int(attrs.get("width", 1))
+        ports.append(ComponentPort(x, y, width, "inout", name))
+    elif name == "Clock":
+        ports.append(ComponentPort(x, y, 1, "out", "CLK"))
+    elif name in ("Ground", "Power"):
+        ports.append(ComponentPort(x, y, 1, "out", name))
+    elif name == "Probe":
+        ports.append(ComponentPort(x, y, 0, "in", "Probe"))
     else:
-        ports.append((x, y))
+        ports.append(ComponentPort(x, y, 0, "inout", name))
 
     return ports
+
+
+def get_component_ports(comp: CircuitComponent) -> List[Tuple[int, int]]:
+    """
+    Computes all exact canvas terminal coordinates (px, py) for a Logisim component
+    based on its library, canonical name, position, and attributes.
+    Preserves exact backward compatibility with all callers and test suites.
+    """
+    if comp.ports:
+        return list(comp.ports)
+    specs = get_component_port_specs(comp)
+    return [(p.x, p.y) for p in specs]
 
 
 def _normalize_probe_radix(val: Any) -> str:
@@ -772,10 +829,11 @@ class CircuitBuilder:
 
     def snap_and_bridge_wire_gaps(self, max_snap_distance: int = 40) -> int:
         """
-        Deterministic Wire Gap Snapper & Bridge.
-        Inspects the circuit geometry, identifies any dangling wire endpoints that stop
-        within max_snap_distance of an unconnected component port or wire trunk,
-        and seamlessly extends or bridges them. Eliminates floating/blue disconnected wires.
+        Deterministic, Width-Aware Wire Gap Snapper & Bridge.
+        Inspects the circuit geometry, analyzes electrical netlist bit widths,
+        identifies dangling wire endpoints, and safely bridges them ONLY to
+        terminals and trunks of strictly compatible bit widths.
+        Eliminates both floating/blue wires AND incompatible-width orange errors.
         """
         if not self.wires or not self.components:
             return 0
@@ -791,10 +849,14 @@ class CircuitBuilder:
                 return True
             return False
 
-        # 1. Collect all component ports
-        all_ports: List[Tuple[int, int]] = []
+        # 1. Collect all component port specs with ground-truth bit widths
+        all_port_specs: List[ComponentPort] = []
         for c in self.components:
-            all_ports.extend(get_component_ports(c))
+            all_port_specs.extend(get_component_port_specs(c))
+        port_spec_map: Dict[Tuple[int, int], ComponentPort] = {
+            (p.x, p.y): p for p in all_port_specs
+        }
+        all_ports = [(p.x, p.y) for p in all_port_specs]
         port_set = set(all_ports)
 
         # 2. Count wire endpoints
@@ -820,7 +882,71 @@ class CircuitBuilder:
         if not unconnected_ports:
             return 0
 
-        # 4. Identify dangling wire endpoints (endpoints that touch no port, no other wire, and not on interior)
+        # 4. Electrical Netlist Analysis: Propagate bit widths across wire nets
+        wire_adj: Dict[int, List[int]] = collections.defaultdict(list)
+        for i in range(len(self.wires)):
+            w1 = self.wires[i]
+            for j in range(i + 1, len(self.wires)):
+                w2 = self.wires[j]
+                if (w1.from_pos in (w2.from_pos, w2.to_pos) or
+                    w1.to_pos in (w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w1.from_pos, w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w1.to_pos, w2.from_pos, w2.to_pos) or
+                    is_point_on_segment(w2.from_pos, w1.from_pos, w1.to_pos) or
+                    is_point_on_segment(w2.to_pos, w1.from_pos, w1.to_pos)):
+                    wire_adj[i].append(j)
+                    wire_adj[j].append(i)
+
+        wire_net: Dict[int, int] = {}
+        net_widths: Dict[int, int] = {}
+        visited_wires = set()
+        net_idx = 0
+
+        for i in range(len(self.wires)):
+            if i in visited_wires:
+                continue
+            queue = collections.deque([i])
+            visited_wires.add(i)
+            current_net_wires = []
+            while queue:
+                curr = queue.popleft()
+                current_net_wires.append(curr)
+                wire_net[curr] = net_idx
+                for neighbor in wire_adj[curr]:
+                    if neighbor not in visited_wires:
+                        visited_wires.add(neighbor)
+                        queue.append(neighbor)
+
+            net_port_widths = set()
+            for w_idx in current_net_wires:
+                w = self.wires[w_idx]
+                for pt in (w.from_pos, w.to_pos):
+                    if pt in port_spec_map:
+                        pw = port_spec_map[pt].width
+                        if pw > 0:
+                            net_port_widths.add(pw)
+                for pt, ps in port_spec_map.items():
+                    if ps.width > 0 and is_point_on_segment(pt, w.from_pos, w.to_pos):
+                        net_port_widths.add(ps.width)
+
+            if len(net_port_widths) == 1:
+                net_widths[net_idx] = next(iter(net_port_widths))
+            elif len(net_port_widths) > 1:
+                net_widths[net_idx] = max(net_port_widths)
+
+            net_idx += 1
+
+        def get_point_net_width(pt: Tuple[int, int]) -> int:
+            for idx, w in enumerate(self.wires):
+                if pt == w.from_pos or pt == w.to_pos or is_point_on_segment(pt, w.from_pos, w.to_pos):
+                    n_id = wire_net.get(idx)
+                    if n_id is not None and n_id in net_widths:
+                        return net_widths[n_id]
+            if pt in port_spec_map and port_spec_map[pt].width > 0:
+                return port_spec_map[pt].width
+            return 0
+
+        # 5. Identify dangling wire endpoints
         dangling_endpoints: List[Tuple[int, int]] = []
         for ep, count in endpoint_counts.items():
             if ep in port_set:
@@ -837,13 +963,22 @@ class CircuitBuilder:
         if not dangling_endpoints:
             return 0
 
-        # 5. Evaluate candidate snap pairs between dangling endpoints and unconnected ports
+        # 6. Evaluate candidate snap pairs with STRICT WIDTH COMPATIBILITY
         candidates = []
         for ep in dangling_endpoints:
+            ep_w = get_point_net_width(ep)
             for port in unconnected_ports:
+                port_spec = port_spec_map.get(port)
+                port_w = port_spec.width if port_spec else 0
+
+                # WIDTH COMPATIBILITY FILTER:
+                # Never bridge multi-bit data buses to 1-bit control ports or vice-versa!
+                if ep_w > 0 and port_w > 0 and ep_w != port_w:
+                    continue
+
                 dx = abs(ep[0] - port[0])
                 dy = abs(ep[1] - port[1])
-                # Exact collinear horizontal match (e.g. comparator output gap)
+                # Exact collinear horizontal match
                 if ep[1] == port[1] and dx <= max_snap_distance:
                     candidates.append((dx, ep, port, 'collinear_h'))
                 # Exact collinear vertical match
@@ -865,7 +1000,6 @@ class CircuitBuilder:
             used_ports.add(port)
             snapped_count += 1
 
-            # Extend collinear existing wire in-place for cleanest possible single wire
             extended = False
             if mtype in ('collinear_h', 'collinear_v'):
                 for w in self.wires:
@@ -880,12 +1014,21 @@ class CircuitBuilder:
             if not extended:
                 self.add_wire(port, ep)
 
-        # 6. Secondary pass: snap remaining dangling endpoints to nearby wire trunks (T-junctions)
+        # 7. Secondary pass: snap remaining dangling endpoints to nearby trunks
+        # WITH STRICT WIDTH COMPATIBILITY
         remaining_dangling = [ep for ep in dangling_endpoints if ep not in used_ep]
         for ep in remaining_dangling:
+            ep_w = get_point_net_width(ep)
             for w in list(self.wires):
                 if w.from_pos == ep or w.to_pos == ep:
                     continue
+                trunk_w = get_point_net_width(w.from_pos)
+
+                # WIDTH COMPATIBILITY FILTER:
+                # Never bridge control lines into different-width data trunks!
+                if ep_w > 0 and trunk_w > 0 and ep_w != trunk_w:
+                    continue
+
                 x1, y1 = w.from_pos
                 x2, y2 = w.to_pos
                 # Vertical trunk: can horizontal wire branch into it?
@@ -920,7 +1063,7 @@ class CircuitBuilder:
                         break
 
         if snapped_count > 0:
-            logger.info(f"Deterministic Wire Snapper: seamlessly bridged {snapped_count} terminal gap(s).")
+            logger.info(f"Width-Aware Wire Snapper: seamlessly bridged {snapped_count} compatible terminal gap(s).")
 
         return snapped_count
 
