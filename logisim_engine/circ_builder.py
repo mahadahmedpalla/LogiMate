@@ -88,7 +88,7 @@ COMPONENT_LIB_MAP = {
 
 @dataclass
 class CircuitComponent:
-    lib: int
+    lib: Optional[int]
     name: str
     x: int
     y: int
@@ -267,6 +267,16 @@ class Wire:
 
 
 
+@dataclass
+class CircuitSheet:
+    name: str
+    components: List[CircuitComponent] = field(default_factory=list)
+    wires: List[Wire] = field(default_factory=list)
+    pin_map: Dict[str, Tuple[int, int]] = field(default_factory=dict)
+    input_pins: Dict[str, Dict] = field(default_factory=dict)
+    output_pins: Dict[str, Dict] = field(default_factory=dict)
+
+
 class CircuitBuilder:
     """
     Constructs a Logisim 2.7.1 compatible circuit with full component support:
@@ -277,17 +287,110 @@ class CircuitBuilder:
     - Plexers (Multiplexer, Demultiplexer, Decoder)
     - Memory units (Register, Counter, Flip-Flops)
     - Probes, Tunnels, Constants, Clocks
+    - Hierarchical Multi-Circuit Sheets & Subcircuit IC chips
     """
 
     def __init__(self, circuit_name: str = "main"):
-        self.circuit_name = circuit_name
-        self.components: List[CircuitComponent] = []
-        self.wires: List[Wire] = []
-        # Maps pin label -> canvas (x, y) coordinate
-        self.pin_map: Dict[str, Tuple[int, int]] = {}
-        # Stores input pins and output pins metadata
-        self.input_pins: Dict[str, Dict] = {}
-        self.output_pins: Dict[str, Dict] = {}
+        self.main_circuit_name = circuit_name
+        self.circuits: Dict[str, CircuitSheet] = {}
+        self._active_sheet_name = circuit_name
+        self.circuits[circuit_name] = CircuitSheet(name=circuit_name)
+
+    @property
+    def circuit_name(self) -> str:
+        return self._active_sheet_name
+
+    @circuit_name.setter
+    def circuit_name(self, name: str):
+        if name not in self.circuits:
+            self.circuits[name] = CircuitSheet(name=name)
+        self._active_sheet_name = name
+
+    @property
+    def active_sheet(self) -> CircuitSheet:
+        if self._active_sheet_name not in self.circuits:
+            self.circuits[self._active_sheet_name] = CircuitSheet(name=self._active_sheet_name)
+        return self.circuits[self._active_sheet_name]
+
+    @property
+    def components(self) -> List[CircuitComponent]:
+        return self.active_sheet.components
+
+    @components.setter
+    def components(self, val: List[CircuitComponent]):
+        self.active_sheet.components = val
+
+    @property
+    def wires(self) -> List[Wire]:
+        return self.active_sheet.wires
+
+    @wires.setter
+    def wires(self, val: List[Wire]):
+        self.active_sheet.wires = val
+
+    @property
+    def pin_map(self) -> Dict[str, Tuple[int, int]]:
+        return self.active_sheet.pin_map
+
+    @pin_map.setter
+    def pin_map(self, val: Dict[str, Tuple[int, int]]):
+        self.active_sheet.pin_map = val
+
+    @property
+    def input_pins(self) -> Dict[str, Dict]:
+        return self.active_sheet.input_pins
+
+    @input_pins.setter
+    def input_pins(self, val: Dict[str, Dict]):
+        self.active_sheet.input_pins = val
+
+    @property
+    def output_pins(self) -> Dict[str, Dict]:
+        return self.active_sheet.output_pins
+
+    @output_pins.setter
+    def output_pins(self, val: Dict[str, Dict]):
+        self.active_sheet.output_pins = val
+
+    def set_active_circuit(self, name: str) -> CircuitSheet:
+        """Switches the active drawing canvas/sheet to the specified circuit name."""
+        if name not in self.circuits:
+            self.circuits[name] = CircuitSheet(name=name)
+        self._active_sheet_name = name
+        return self.circuits[name]
+
+    def add_circuit(self, name: str) -> CircuitSheet:
+        """Creates a new circuit sheet if it doesn't exist, without switching active sheet."""
+        if name not in self.circuits:
+            self.circuits[name] = CircuitSheet(name=name)
+        return self.circuits[name]
+
+    def add_subcircuit_instance(
+        self,
+        subcircuit_name: str,
+        x: int,
+        y: int,
+        label: Optional[str] = None,
+        attrs: Optional[Dict[str, str]] = None,
+    ) -> CircuitComponent:
+        """Instantiates a subcircuit (modular IC chip) onto the active circuit sheet."""
+        comp_attrs = {}
+        if label:
+            comp_attrs["label"] = label
+        if attrs:
+            comp_attrs.update(attrs)
+
+        comp = CircuitComponent(
+            lib=None,
+            name=subcircuit_name,
+            x=x,
+            y=y,
+            attrs=comp_attrs,
+            label=label,
+            ports=[(x, y)],
+        )
+        self.components.append(comp)
+        return comp
 
     def add_pin(
         self,
@@ -770,15 +873,32 @@ class CircuitBuilder:
             self.wires.append(Wire((x1, y1), (mid_x, mid_y)))
             self.wires.append(Wire((mid_x, mid_y), (x2, y2)))
 
-    def snap_and_bridge_wire_gaps(self, max_snap_distance: int = 40) -> int:
+    def snap_and_bridge_wire_gaps(self, max_snap_distance: int = 40, sheet: Optional[CircuitSheet] = None) -> int:
         """
         Deterministic Wire Gap Snapper & Bridge.
-        Inspects the circuit geometry, identifies any dangling wire endpoints that stop
-        within max_snap_distance of an unconnected component port or wire trunk,
-        and seamlessly extends or bridges them. Eliminates floating/blue disconnected wires.
+        Inspects the circuit geometry of the specified sheet (or active sheet),
+        identifies any dangling wire endpoints that stop within max_snap_distance
+        of an unconnected component port or wire trunk, and seamlessly extends or bridges them.
         """
-        if not self.wires or not self.components:
+        target_sheet = sheet if sheet is not None else self.active_sheet
+        if not target_sheet.wires or not target_sheet.components:
             return 0
+
+        wires = target_sheet.wires
+        components = target_sheet.components
+
+        def add_wire_to_target(p1: Tuple[int, int], p2: Tuple[int, int]):
+            x1, y1 = int(p1[0]), int(p1[1])
+            x2, y2 = int(p2[0]), int(p2[1])
+            if x1 == x2 and y1 == y2:
+                return
+            if x1 == x2 or y1 == y2:
+                wires.append(Wire((x1, y1), (x2, y2)))
+            else:
+                mid_x = x2
+                mid_y = y1
+                wires.append(Wire((x1, y1), (mid_x, mid_y)))
+                wires.append(Wire((mid_x, mid_y), (x2, y2)))
 
         # Helper: check if a point lies on a wire segment
         def is_point_on_segment(pt: Tuple[int, int], p1: Tuple[int, int], p2: Tuple[int, int]) -> bool:
@@ -793,13 +913,13 @@ class CircuitBuilder:
 
         # 1. Collect all component ports
         all_ports: List[Tuple[int, int]] = []
-        for c in self.components:
+        for c in components:
             all_ports.extend(get_component_ports(c))
         port_set = set(all_ports)
 
         # 2. Count wire endpoints
         endpoint_counts: Dict[Tuple[int, int], int] = collections.defaultdict(int)
-        for w in self.wires:
+        for w in wires:
             endpoint_counts[w.from_pos] += 1
             endpoint_counts[w.to_pos] += 1
 
@@ -810,7 +930,7 @@ class CircuitBuilder:
             if endpoint_counts[p] > 0:
                 connected = True
             else:
-                for w in self.wires:
+                for w in wires:
                     if is_point_on_segment(p, w.from_pos, w.to_pos):
                         connected = True
                         break
@@ -827,7 +947,7 @@ class CircuitBuilder:
                 continue
             if count == 1:
                 on_interior = False
-                for w in self.wires:
+                for w in wires:
                     if ep != w.from_pos and ep != w.to_pos and is_point_on_segment(ep, w.from_pos, w.to_pos):
                         on_interior = True
                         break
@@ -868,7 +988,7 @@ class CircuitBuilder:
             # Extend collinear existing wire in-place for cleanest possible single wire
             extended = False
             if mtype in ('collinear_h', 'collinear_v'):
-                for w in self.wires:
+                for w in wires:
                     if w.from_pos == ep:
                         w.from_pos = port
                         extended = True
@@ -878,12 +998,12 @@ class CircuitBuilder:
                         extended = True
                         break
             if not extended:
-                self.add_wire(port, ep)
+                add_wire_to_target(port, ep)
 
         # 6. Secondary pass: snap remaining dangling endpoints to nearby wire trunks (T-junctions)
         remaining_dangling = [ep for ep in dangling_endpoints if ep not in used_ep]
         for ep in remaining_dangling:
-            for w in list(self.wires):
+            for w in list(wires):
                 if w.from_pos == ep or w.to_pos == ep:
                     continue
                 x1, y1 = w.from_pos
@@ -893,7 +1013,7 @@ class CircuitBuilder:
                     y_min, y_max = min(y1, y2), max(y1, y2)
                     if y_min <= ep[1] <= y_max and abs(ep[0] - x1) <= max_snap_distance:
                         target = (x1, ep[1])
-                        for ow in self.wires:
+                        for ow in wires:
                             if ow.from_pos == ep:
                                 ow.from_pos = target
                                 snapped_count += 1
@@ -908,7 +1028,7 @@ class CircuitBuilder:
                     x_min, x_max = min(x1, x2), max(x1, x2)
                     if x_min <= ep[0] <= x_max and abs(ep[1] - y1) <= max_snap_distance:
                         target = (ep[0], y1)
-                        for ow in self.wires:
+                        for ow in wires:
                             if ow.from_pos == ep:
                                 ow.from_pos = target
                                 snapped_count += 1
@@ -920,15 +1040,16 @@ class CircuitBuilder:
                         break
 
         if snapped_count > 0:
-            logger.info(f"Deterministic Wire Snapper: seamlessly bridged {snapped_count} terminal gap(s).")
+            logger.info(f"Deterministic Wire Snapper ({target_sheet.name}): seamlessly bridged {snapped_count} terminal gap(s).")
 
         return snapped_count
 
     def to_xml(self) -> str:
-        """Generates full, valid Logisim 2.7.1 XML document string."""
-        self.snap_and_bridge_wire_gaps()
-        root = ET.Element("project", source="2.7.1", version="1.0")
+        """Generates full, valid Logisim 2.7.1 XML document string supporting multi-circuit sheets."""
+        for sheet in self.circuits.values():
+            self.snap_and_bridge_wire_gaps(sheet=sheet)
 
+        root = ET.Element("project", source="2.7.1", version="1.0")
 
         # Standard Libraries
         libs = [
@@ -953,8 +1074,9 @@ class CircuitBuilder:
                 for ak, av in tool_attrs.items():
                     ET.SubElement(tool_elem, "a", name=ak, val=av)
 
-        # Main declaration
-        ET.SubElement(root, "main", name=self.circuit_name)
+        # Main declaration: if 'main' exists in sheets, use 'main', otherwise main_circuit_name
+        main_decl = "main" if "main" in self.circuits else self.main_circuit_name
+        ET.SubElement(root, "main", name=main_decl)
 
         # Options
         opts = ET.SubElement(root, "options")
@@ -982,30 +1104,28 @@ class CircuitBuilder:
         ET.SubElement(tb, "tool", lib="1", name="AND Gate")
         ET.SubElement(tb, "tool", lib="1", name="OR Gate")
 
-        # Circuit
-        circ = ET.SubElement(root, "circuit", name=self.circuit_name)
-        ET.SubElement(circ, "a", name="circuit", val=self.circuit_name)
-        ET.SubElement(circ, "a", name="clabel", val="")
-        ET.SubElement(circ, "a", name="clabelup", val="east")
-        ET.SubElement(circ, "a", name="clabelfont", val="SansSerif plain 12")
+        # Serialize each Circuit Sheet
+        for sheet in self.circuits.values():
+            circ = ET.SubElement(root, "circuit", name=sheet.name)
+            ET.SubElement(circ, "a", name="circuit", val=sheet.name)
+            ET.SubElement(circ, "a", name="clabel", val="")
+            ET.SubElement(circ, "a", name="clabelup", val="east")
+            ET.SubElement(circ, "a", name="clabelfont", val="SansSerif plain 12")
 
-        # Wires
-        for w in self.wires:
-            w_elem = ET.SubElement(circ, "wire")
-            w_elem.attrib["from"] = f"({w.from_pos[0]},{w.from_pos[1]})"
-            w_elem.attrib["to"] = f"({w.to_pos[0]},{w.to_pos[1]})"
+            # Wires
+            for w in sheet.wires:
+                w_elem = ET.SubElement(circ, "wire")
+                w_elem.attrib["from"] = f"({w.from_pos[0]},{w.from_pos[1]})"
+                w_elem.attrib["to"] = f"({w.to_pos[0]},{w.to_pos[1]})"
 
-        # Components
-        for c in self.components:
-            comp_elem = ET.SubElement(
-                circ,
-                "comp",
-                lib=str(c.lib),
-                loc=f"({c.x},{c.y})",
-                name=c.name,
-            )
-            for ak, av in c.attrs.items():
-                ET.SubElement(comp_elem, "a", name=ak, val=str(av))
+            # Components
+            for c in sheet.components:
+                attribs = {"loc": f"({c.x},{c.y})", "name": c.name}
+                if c.lib is not None and c.lib >= 0:
+                    attribs["lib"] = str(c.lib)
+                comp_elem = ET.SubElement(circ, "comp", **attribs)
+                for ak, av in c.attrs.items():
+                    ET.SubElement(comp_elem, "a", name=ak, val=str(av))
 
         # Pretty print with minidom
         from xml.dom import minidom

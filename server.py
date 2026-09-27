@@ -7,14 +7,16 @@ import sys
 import os
 import json
 from typing import Dict, Any, Optional
+import asyncio
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from logisim_engine.driver import LogisimDriver
 from agent.gemini_client import GeminiClient, AVAILABLE_MODELS
 from agent.controller_agent import ControllerAgent
+from agent.planner_agent import PlannerAgent
 
 
 def get_bundle_dir() -> str:
@@ -85,6 +87,12 @@ agent = ControllerAgent(
     workspace_dir=OUTPUT_DIR,
 )
 
+planner_agent = PlannerAgent(
+    gemini_client=gemini,
+    driver=driver,
+    workspace_dir=OUTPUT_DIR,
+)
+
 app = FastAPI(title="AI Logisim Controller")
 
 
@@ -100,6 +108,7 @@ class SettingsPayload(BaseModel):
 
 class ChatPayload(BaseModel):
     prompt: str
+    mode: Optional[str] = "normal"
 
 
 class PokePayload(BaseModel):
@@ -191,8 +200,51 @@ def test_key(payload: SettingsPayload):
 def chat(payload: ChatPayload):
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+    if payload.mode == "agent":
+        result = planner_agent.execute_hierarchical_plan(payload.prompt)
+        if planner_agent.current_builder:
+            agent.current_builder = planner_agent.current_builder
+            agent.active_pin_map = planner_agent.active_pin_map.copy()
+        return result
     result = agent.execute_prompt(payload.prompt)
     return result
+
+
+@app.post("/api/chat-agent-stream")
+async def chat_agent_stream(payload: ChatPayload):
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+
+    queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def progress_callback(event: Dict[str, Any]):
+        loop.call_soon_threadsafe(queue.put_nowait, {"type": "progress", **event})
+
+    async def run_worker():
+        try:
+            result = await asyncio.to_thread(
+                planner_agent.execute_hierarchical_plan,
+                payload.prompt,
+                progress_callback,
+            )
+            if planner_agent.current_builder:
+                agent.current_builder = planner_agent.current_builder
+                agent.active_pin_map = planner_agent.active_pin_map.copy()
+            await queue.put({"type": "complete", "result": result})
+        except Exception as e:
+            await queue.put({"type": "error", "error": str(e)})
+
+    asyncio.create_task(run_worker())
+
+    async def event_generator():
+        while True:
+            item = await queue.get()
+            yield f"data: {json.dumps(item)}\n\n"
+            if item.get("type") in ("complete", "error"):
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/api/control/launch-logisim")

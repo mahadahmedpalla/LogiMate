@@ -43,6 +43,42 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("send-btn");
   const promptChips = document.querySelectorAll(".prompt-chip");
 
+  // Mode Switcher Elements
+  let currentMode = localStorage.getItem("logimate_mode") || "normal";
+  const modeNormalBtn = document.getElementById("mode-normal-btn");
+  const modeAgentBtn = document.getElementById("mode-agent-btn");
+  const activeModePill = document.getElementById("active-mode-pill");
+
+  function setMode(mode) {
+    currentMode = mode;
+    localStorage.setItem("logimate_mode", mode);
+    if (mode === "agent") {
+      if (modeNormalBtn) modeNormalBtn.classList.remove("active");
+      if (modeAgentBtn) modeAgentBtn.classList.add("active");
+      if (activeModePill) {
+        activeModePill.classList.add("agent-active");
+        activeModePill.innerHTML = '<span class="mode-mini-dot"></span><span class="mode-pill-text">🧠 Agent Mode</span>';
+      }
+      if (promptInput) {
+        promptInput.placeholder = "Agent Mode: Describe any complex digital architecture (e.g. 'Build an 8-bit Mini CPU with ALU and Registers')...";
+      }
+    } else {
+      if (modeAgentBtn) modeAgentBtn.classList.remove("active");
+      if (modeNormalBtn) modeNormalBtn.classList.add("active");
+      if (activeModePill) {
+        activeModePill.classList.remove("agent-active");
+        activeModePill.innerHTML = '<span class="mode-mini-dot"></span><span class="mode-pill-text">⚡ Normal Mode</span>';
+      }
+      if (promptInput) {
+        promptInput.placeholder = "Ask anything (e.g. 'Build a 2-to-1 Multiplexer', 'Turn on switch A', 'Step the clock 3 times')...";
+      }
+    }
+  }
+
+  if (modeNormalBtn) modeNormalBtn.addEventListener("click", () => setMode("normal"));
+  if (modeAgentBtn) modeAgentBtn.addEventListener("click", () => setMode("agent"));
+  setMode(currentMode);
+
   // Pins & Circuit Info
   const pinsGrid = document.getElementById("pins-grid");
   const pinCountBadge = document.getElementById("pin-count-badge");
@@ -258,6 +294,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Prompt chips
   promptChips.forEach((chip) => {
     chip.addEventListener("click", () => {
+      if (chip.dataset.mode) {
+        setMode(chip.dataset.mode);
+      }
       promptInput.value = chip.dataset.prompt;
       promptInput.focus();
     });
@@ -281,61 +320,145 @@ document.addEventListener("DOMContentLoaded", () => {
     promptInput.value = "";
     sendBtn.disabled = true;
 
-    // Show pending message
-    const pendingId = appendPendingMessage();
+    if (currentMode === "agent") {
+      // ============================================================
+      // 🧠 AGENT MODE: Hierarchical Multi-Step Streaming Execution
+      // ============================================================
+      const agentCardId = appendAgentProgressCard();
+      try {
+        const response = await fetch("/api/chat-agent-stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, mode: "agent" }),
+        });
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-      });
+        if (!response.ok) {
+          throw new Error(`Server returned HTTP ${response.status}`);
+        }
 
-      const data = await res.json();
-      removeMessage(pendingId);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
 
-      if (!res.ok || !data.success) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (trimmed.startsWith("data: ")) {
+              try {
+                const eventData = JSON.parse(trimmed.slice(6));
+                if (eventData.type === "progress") {
+                  updateAgentProgressCard(agentCardId, eventData);
+                } else if (eventData.type === "complete") {
+                  const res = eventData.result;
+                  updateAgentProgressCard(agentCardId, { message: "Complete! Multi-circuit loaded into Logisim.", percent: 100 });
+                  setTimeout(() => {
+                    removeMessage(agentCardId);
+                    appendAssistantMessage({
+                      thought: res.thought,
+                      response: res.response,
+                      actions: res.executed_actions || [],
+                    });
+
+                    if (res.pin_map) {
+                      currentActivePins = res.pin_map;
+                      renderPins(res.pin_map);
+                    }
+
+                    updateXmlView();
+                    updateSchematicView();
+                  }, 600);
+                } else if (eventData.type === "error") {
+                  removeMessage(agentCardId);
+                  appendAssistantMessage({
+                    thought: "",
+                    response: `Agent Mode Error: ${eventData.error}`,
+                    actions: [],
+                    isError: true,
+                  });
+                }
+              } catch (parseErr) {
+                console.warn("SSE chunk parse warning:", parseErr, trimmed);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        removeMessage(agentCardId);
         appendAssistantMessage({
           thought: "",
-          response: data.error || data.detail || "An error occurred while contacting the controller.",
+          response: `Agent Mode Network error: ${err.message}`,
           actions: [],
           isError: true,
         });
-      } else {
-        appendAssistantMessage({
-          thought: data.thought,
-          response: data.response,
-          actions: data.executed_actions,
+      } finally {
+        sendBtn.disabled = false;
+        updateStatus();
+      }
+    } else {
+      // ============================================================
+      // ⚡ NORMAL MODE (100% UNTOUCHED ORIGINAL PIPELINE)
+      // ============================================================
+      const pendingId = appendPendingMessage();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, mode: "normal" }),
         });
 
-        // If screenshot returned
-        if (data.screenshot) {
-          liveScreenshotImg.src = data.screenshot;
-          liveScreenshotImg.classList.remove("hidden");
-          if (screenshotPlaceholder) screenshotPlaceholder.classList.add("hidden");
-        }
+        const data = await res.json();
+        removeMessage(pendingId);
 
-        // Update pins
-        if (data.pin_map) {
-          currentActivePins = data.pin_map;
-          renderPins(data.pin_map);
-        }
+        if (!res.ok || !data.success) {
+          appendAssistantMessage({
+            thought: "",
+            response: data.error || data.detail || "An error occurred while contacting the controller.",
+            actions: [],
+            isError: true,
+          });
+        } else {
+          appendAssistantMessage({
+            thought: data.thought,
+            response: data.response,
+            actions: data.executed_actions,
+          });
 
-        // Update XML view and Live Canvas
-        updateXmlView();
-        updateSchematicView();
+          // If screenshot returned
+          if (data.screenshot) {
+            liveScreenshotImg.src = data.screenshot;
+            liveScreenshotImg.classList.remove("hidden");
+            if (screenshotPlaceholder) screenshotPlaceholder.classList.add("hidden");
+          }
+
+          // Update pins
+          if (data.pin_map) {
+            currentActivePins = data.pin_map;
+            renderPins(data.pin_map);
+          }
+
+          // Update XML view and Live Canvas
+          updateXmlView();
+          updateSchematicView();
+        }
+      } catch (err) {
+        removeMessage(pendingId);
+        appendAssistantMessage({
+          thought: "",
+          response: `Network error: ${err.message}`,
+          actions: [],
+          isError: true,
+        });
+      } finally {
+        sendBtn.disabled = false;
+        updateStatus();
       }
-    } catch (err) {
-      removeMessage(pendingId);
-      appendAssistantMessage({
-        thought: "",
-        response: `Network error: ${err.message}`,
-        actions: [],
-        isError: true,
-      });
-    } finally {
-      sendBtn.disabled = false;
-      updateStatus();
     }
   });
 
@@ -560,6 +683,75 @@ document.addEventListener("DOMContentLoaded", () => {
     chatFeed.appendChild(card);
     chatFeed.scrollTop = chatFeed.scrollHeight;
     return id;
+  }
+
+  function appendAgentProgressCard() {
+    const id = "agent-progress-" + Date.now();
+    const card = document.createElement("div");
+    card.className = "agent-progress-card";
+    card.id = id;
+    card.innerHTML = `
+      <div class="agent-progress-header">
+        <div class="agent-progress-title-group">
+          <div class="agent-pulse-icon">🧠</div>
+          <div>
+            <div class="agent-progress-title">Agent Mode: Hierarchical Synthesis</div>
+            <div style="font-size: 0.72rem; color: var(--text-muted);">Multi-Step Architecture Planner</div>
+          </div>
+        </div>
+        <div class="agent-progress-percent" id="${id}-percent">10%</div>
+      </div>
+      <div class="agent-progress-bar-bg">
+        <div class="agent-progress-bar-fill" id="${id}-fill" style="width: 10%;"></div>
+      </div>
+      <div class="agent-steps-list" id="${id}-steps">
+        <div class="agent-step-item active">
+          <span class="step-icon spinner"></span>
+          <span class="step-label">Analyzing architecture and planning modular subcircuits...</span>
+        </div>
+      </div>
+    `;
+    chatFeed.appendChild(card);
+    chatFeed.scrollTop = chatFeed.scrollHeight;
+    return id;
+  }
+
+  function updateAgentProgressCard(cardId, data) {
+    const fill = document.getElementById(`${cardId}-fill`);
+    const pctLabel = document.getElementById(`${cardId}-percent`);
+    const stepsList = document.getElementById(`${cardId}-steps`);
+
+    if (fill && data.percent !== undefined) {
+      fill.style.width = Math.min(100, Math.max(5, data.percent)) + "%";
+    }
+    if (pctLabel && data.percent !== undefined) {
+      pctLabel.textContent = data.percent + "%";
+    }
+
+    if (stepsList && data.message) {
+      const activeItems = stepsList.querySelectorAll(".agent-step-item.active");
+      activeItems.forEach(item => {
+        item.classList.remove("active");
+        item.classList.add("completed");
+        const icon = item.querySelector(".step-icon");
+        if (icon) {
+          icon.className = "step-icon";
+          icon.textContent = "✔";
+          icon.style.color = "var(--accent-emerald)";
+        }
+      });
+
+      const newItem = document.createElement("div");
+      if (data.percent >= 100) {
+        newItem.className = "agent-step-item completed";
+        newItem.innerHTML = `<span class="step-icon" style="color: var(--accent-emerald);">✔</span><span class="step-label">${escapeHtml(data.message)}</span>`;
+      } else {
+        newItem.className = "agent-step-item active";
+        newItem.innerHTML = `<span class="step-icon spinner"></span><span class="step-label">${escapeHtml(data.message)}</span>`;
+      }
+      stepsList.appendChild(newItem);
+      chatFeed.scrollTop = chatFeed.scrollHeight;
+    }
   }
 
   function removeMessage(id) {

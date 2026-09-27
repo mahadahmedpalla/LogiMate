@@ -168,6 +168,226 @@ def test_driver():
     print(f"[PASS] LogisimDriver test passed (connected={info['connected']})")
 
 
+def test_multi_circuit():
+    b = CircuitBuilder("main")
+    # Subcircuit 1: ALU
+    b.set_active_circuit("ALU")
+    p1 = b.add_pin("A", 100, 100, width=8)
+    p2 = b.add_pin("B", 100, 140, width=8)
+    adder = b.add_arithmetic("Adder", 200, 120, width=8)
+    p_out = b.add_pin("Result", 260, 120, is_output=True, width=8)
+    b.add_wire(p1, (160, 110))
+    b.add_wire(p2, (160, 130))
+    b.add_wire((200, 120), p_out)
+
+    # Subcircuit 2: Register
+    b.set_active_circuit("Register")
+    d_in = b.add_pin("D", 100, 100, width=8)
+    reg = b.add_register(200, 100, width=8)
+    q_out = b.add_pin("Q", 260, 100, is_output=True, width=8)
+    b.add_wire(d_in, reg["d"])
+    b.add_wire(reg["q"], q_out)
+
+    # Top-Level: main
+    b.set_active_circuit("main")
+    alu_chip = b.add_subcircuit_instance("ALU", 220, 160, label="ALU_1")
+    reg_chip = b.add_subcircuit_instance("Register", 120, 120, label="REG_A")
+
+    xml_text = b.to_xml()
+    root = ET.fromstring(xml_text)
+
+    # Verify main project element
+    main_elem = root.find("main")
+    assert main_elem is not None and main_elem.attrib["name"] == "main"
+
+    # Verify circuits defined
+    circuits = {c.attrib["name"]: c for c in root.findall("circuit")}
+    assert "ALU" in circuits, "ALU circuit missing from project XML"
+    assert "Register" in circuits, "Register circuit missing from project XML"
+    assert "main" in circuits, "main circuit missing from project XML"
+
+    # Verify main circuit has the subcircuit instances without lib attribute
+    main_comps = circuits["main"].findall("comp")
+    assert len(main_comps) == 2
+    comp_names = [c.attrib.get("name") for c in main_comps]
+    assert "ALU" in comp_names and "Register" in comp_names
+    for c in main_comps:
+        assert "lib" not in c.attrib, f"Subcircuit component should not have lib attribute: {ET.tostring(c)}"
+
+    print(f"[PASS] Multi-Circuit test passed (Subcircuits: {list(circuits.keys())})")
+
+
+def test_planner_agent():
+    from unittest.mock import MagicMock
+    from agent.planner_agent import PlannerAgent
+    import tempfile
+
+    mock_gemini = MagicMock()
+    mock_driver = MagicMock()
+    mock_driver.open_circuit_direct.return_value = True
+
+    mock_gemini.generate_json.side_effect = [
+        # Decomposition plan
+        {
+            "success": True,
+            "data": {
+                "system_name": "Test CPU",
+                "architecture_summary": "8-bit micro architecture",
+                "subcircuits": [
+                    {
+                        "name": "ALU",
+                        "purpose": "8-bit ALU",
+                        "inputs": [{"name": "A", "width": 8}, {"name": "B", "width": 8}],
+                        "outputs": [{"name": "Result", "width": 8}]
+                    },
+                    {
+                        "name": "Register",
+                        "purpose": "8-bit Register",
+                        "inputs": [{"name": "D", "width": 8}],
+                        "outputs": [{"name": "Q", "width": 8}]
+                    }
+                ],
+                "assembly_strategy": "Interconnect on main"
+            }
+        },
+        # ALU synthesis
+        {
+            "success": True,
+            "data": {
+                "pins": [
+                    {"name": "A", "loc": [100, 100], "width": 8, "is_output": False},
+                    {"name": "B", "loc": [100, 140], "width": 8, "is_output": False},
+                    {"name": "Result", "loc": [300, 120], "width": 8, "is_output": True}
+                ],
+                "components": [
+                    {"type": "Adder", "loc": [200, 120], "width": 8}
+                ],
+                "wires": [
+                    {"from": [100, 100], "to": [160, 110]},
+                    {"from": [100, 140], "to": [160, 130]},
+                    {"from": [200, 120], "to": [300, 120]}
+                ]
+            }
+        },
+        # Register synthesis
+        {
+            "success": True,
+            "data": {
+                "pins": [
+                    {"name": "D", "loc": [100, 100], "width": 8, "is_output": False},
+                    {"name": "Q", "loc": [300, 100], "width": 8, "is_output": True}
+                ],
+                "components": [
+                    {"type": "Register", "loc": [200, 100], "width": 8}
+                ],
+                "wires": [
+                    {"from": [100, 100], "to": [170, 100]},
+                    {"from": [200, 100], "to": [300, 100]}
+                ]
+            }
+        },
+        # Assembly on main
+        {
+            "success": True,
+            "data": {
+                "subcircuit_instances": [
+                    {"name": "ALU", "loc": [260, 160], "label": "ALU_1"},
+                    {"name": "Register", "loc": [120, 120], "label": "R0"}
+                ],
+                "pins": [
+                    {"name": "CLK", "loc": [60, 100], "width": 1, "is_output": False}
+                ],
+                "components": [
+                    {"type": "Probe", "loc": [380, 160], "radix": "16", "label": "ALU_OUT"}
+                ],
+                "wires": []
+            }
+        }
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        planner = PlannerAgent(gemini_client=mock_gemini, driver=mock_driver, workspace_dir=tmpdir)
+        progress_events = []
+        result = planner.execute_hierarchical_plan(
+            "Build an 8-bit Mini CPU",
+            progress_callback=lambda evt: progress_events.append(evt)
+        )
+
+        assert result["success"] is True
+        assert result["mode"] == "agent"
+        assert set(result["circuits"]) == {"main", "ALU", "Register"}
+        assert os.path.exists(result["circuit_file"])
+        assert len(progress_events) >= 5
+
+        # Verify generated XML
+        root = ET.parse(result["circuit_file"]).getroot()
+        circs = {c.attrib["name"]: c for c in root.findall("circuit")}
+        assert "main" in circs and "ALU" in circs and "Register" in circs
+        print(f"[PASS] PlannerAgent Hierarchical Synthesis test passed ({len(progress_events)} progress steps verified)")
+
+
+def test_server_endpoints():
+    from unittest.mock import patch
+    from starlette.testclient import TestClient
+    from server import app, agent, planner_agent
+
+    client = TestClient(app)
+
+    # 1. Normal Mode Chat
+    with patch.object(agent, "execute_prompt") as mock_exec:
+        mock_exec.return_value = {
+            "success": True,
+            "thought": "Normal mode synthesis",
+            "response": "Built half adder",
+            "executed_actions": [],
+            "pin_map": {"A": [100, 100]}
+        }
+        res = client.post("/api/chat", json={"prompt": "build half adder", "mode": "normal"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["thought"] == "Normal mode synthesis"
+        mock_exec.assert_called_once_with("build half adder")
+
+    # 2. Agent Mode Chat (synchronous)
+    with patch.object(planner_agent, "execute_hierarchical_plan") as mock_plan:
+        mock_plan.return_value = {
+            "success": True,
+            "mode": "agent",
+            "system_name": "8-bit CPU",
+            "response": "Built 8-bit CPU",
+            "circuits": ["main", "ALU", "Register"],
+            "executed_actions": []
+        }
+        res = client.post("/api/chat", json={"prompt": "build cpu", "mode": "agent"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["mode"] == "agent"
+        mock_plan.assert_called_once_with("build cpu")
+
+    # 3. Agent Mode Streaming
+    with patch.object(planner_agent, "execute_hierarchical_plan") as mock_plan_stream:
+        def fake_exec(prompt, callback=None):
+            if callback:
+                callback({"step": "planning", "message": "Analyzing system...", "percent": 10})
+                callback({"step": "synthesizing", "message": "Synthesized ALU", "percent": 50})
+            return {
+                "success": True,
+                "mode": "agent",
+                "system_name": "8-bit CPU",
+                "response": "Finished streaming build",
+                "circuits": ["main", "ALU"],
+                "executed_actions": []
+            }
+        mock_plan_stream.side_effect = fake_exec
+        res = client.post("/api/chat-agent-stream", json={"prompt": "build cpu", "mode": "agent"})
+        assert res.status_code == 200
+        assert "text/event-stream" in res.headers["content-type"]
+        events = [line for line in res.text.split("\n\n") if line.strip().startswith("data: ")]
+        assert len(events) >= 2
+
+    print(f"[PASS] Server Endpoints & Streaming test passed (Normal + Agent Mode)")
+
+
 if __name__ == "__main__":
     print("Running AI Logisim Controller Test Suite...")
     test_circ_builder()
@@ -175,7 +395,11 @@ if __name__ == "__main__":
     test_wire_snapping()
     test_priority_encoder()
     test_normalization()
+    test_multi_circuit()
+    test_planner_agent()
+    test_server_endpoints()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
+
 
 

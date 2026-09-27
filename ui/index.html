@@ -39,6 +39,19 @@
         </button>
       </div>
 
+      <!-- Execution Mode Switcher: Normal vs Agent Mode -->
+      <div class="mode-toggle-group" id="mode-toggle-group" role="tablist">
+        <button class="mode-toggle-btn active" id="mode-normal-btn" data-mode="normal" title="Normal Mode: Direct single-turn synthesis for gates, adders, and small circuits">
+          <span class="mode-icon">⚡</span>
+          <span class="mode-text">Normal</span>
+        </button>
+        <button class="mode-toggle-btn" id="mode-agent-btn" data-mode="agent" title="Agent Mode: Autonomous multi-step planner for CPUs, ALUs, and complex architectures">
+          <span class="mode-icon">🧠</span>
+          <span class="mode-text">Agent Mode</span>
+          <span class="mode-glow-badge">Multi-Step</span>
+        </button>
+      </div>
+
       <!-- Quick Simulation Controls & Settings -->
       <div class="header-actions">
         <div class="sim-quick-controls">
@@ -88,6 +101,7 @@
         <!-- Suggested Quick Prompts -->
         <div class="prompts-bar">
           <span class="prompts-title">Try:</span>
+          <button class="prompt-chip chip-agent" data-prompt="Build a complete 8-bit Mini CPU with ALU, Registers, and Program Counter in Logisim from scratch" data-mode="agent">🧠 8-bit Mini CPU</button>
           <button class="prompt-chip" data-prompt="Build a 1-bit Full Adder with inputs A, B, Cin and test 1 + 1">Full Adder</button>
           <button class="prompt-chip" data-prompt="Create a 2-to-1 Multiplexer and open it in Logisim">2:1 Mux</button>
           <button class="prompt-chip" data-prompt="Build an SR Latch using NOR gates">SR Latch</button>
@@ -112,6 +126,7 @@
               <p>Welcome! I can autonomously generate <strong>Logisim 2.7.1 circuits</strong>, reload them directly into your running window, toggle inputs using mathematical coordinates (no slow vision delays), and control clock simulations.</p>
               <div class="feature-pills">
                 <span class="feature-pill">⚡ Instant .circ XML Generation</span>
+                <span class="feature-pill">🧠 Agent Mode Multi-Step Architecture</span>
                 <span class="feature-pill">🎯 Zero-Vision Coordinate Poking</span>
                 <span class="feature-pill">⏱ Keyboard Automation (Ctrl+T/K/R)</span>
               </div>
@@ -131,6 +146,10 @@
             ></textarea>
             <div class="input-bottom-bar">
               <div class="input-meta-info">
+                <span class="active-mode-pill" id="active-mode-pill">
+                  <span class="mode-mini-dot"></span>
+                  <span class="mode-pill-text">⚡ Normal Mode</span>
+                </span>
                 <span class="active-model-pill" id="active-model-pill">Gemini 3.8 Flash</span>
                 <span class="keyboard-hint">Press <kbd>Ctrl+Enter</kbd> to submit</span>
               </div>
