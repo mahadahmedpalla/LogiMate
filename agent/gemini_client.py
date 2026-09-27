@@ -7,9 +7,9 @@ import json
 import time
 import logging
 from typing import Dict, Any, List, Optional, Callable
-from google import genai
-from google.genai import types
-from google.genai.errors import APIError
+from google import genai  # type: ignore
+from google.genai import types  # type: ignore
+from google.genai.errors import APIError  # type: ignore
 
 logger = logging.getLogger("AI_Logisim_Controller.gemini_client")
 
