@@ -63,7 +63,7 @@ class LogisimDriver:
             if os.path.exists(p):
                 import subprocess
                 try:
-                    subprocess.Popen(["javaw", "-jar", p])
+                    subprocess.Popen(["javaw", "-jar", p, "-nosplash"])
                     time.sleep(0.5)
                     self.focus()
                     return True
@@ -218,8 +218,8 @@ class LogisimDriver:
         if exe_path:
             import subprocess
             try:
-                # Launch Logisim directly with circuit argument
-                subprocess.Popen(["javaw", "-jar", exe_path, abs_path])
+                # Launch Logisim directly with circuit argument and -nosplash to bypass splash screen deadlock
+                subprocess.Popen(["javaw", "-jar", exe_path, "-nosplash", abs_path])
                 time.sleep(0.8)
 
                 # Close previous Logisim windows to prevent window and JVM stacking
