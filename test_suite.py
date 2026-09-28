@@ -4,7 +4,7 @@ Unit and integration test suite for AI Logisim Controller.
 
 import os
 import xml.etree.ElementTree as ET
-from logisim_engine.circ_builder import CircuitBuilder
+from logisim_engine.circ_builder import CircuitBuilder, Wire
 from logisim_engine.driver import LogisimDriver
 from agent.circuit_templates import (
     build_half_adder,
@@ -278,6 +278,71 @@ def test_erc_cross_width_pruning():
     print("[PASS] Electrical Rules Check (ERC) test passed (illegal cross-width bridges severed, valid nets preserved)")
 
 
+def test_manhattan_enforcement():
+    b = CircuitBuilder("test_manhattan")
+    b.add_pin("In", 100, 100)
+    b.add_pin("Out", 300, 300, is_output=True)
+
+    # Intentionally inject diagonal and degenerate wires
+    b.wires.append(Wire((100, 100), (200, 200)))   # Diagonal wire!
+    b.wires.append(Wire((200, 200), (300, 300)))   # Diagonal wire!
+    b.wires.append(Wire((150, 150), (150, 150)))   # Zero-length degenerate wire!
+    b.wires.append(Wire((100, 100), (200, 100)))   # Valid orthogonal wire
+    b.wires.append(Wire((200, 100), (100, 100)))   # Reverse duplicate of above
+
+    xml = b.to_xml()
+    root = ET.fromstring(xml)
+    wires = root.find("circuit").findall("wire")
+
+    # Verify that every wire in the XML is strictly Manhattan orthogonal (x1 == x2 or y1 == y2)
+    for w in wires:
+        p1 = eval(w.attrib["from"])
+        p2 = eval(w.attrib["to"])
+        assert p1 != p2, f"ERROR: Degenerate zero-length wire {p1} -> {p2} was not pruned!"
+        assert p1[0] == p2[0] or p1[1] == p2[1], (
+            f"CRITICAL ERROR: Non-orthogonal (diagonal) wire {p1} -> {p2} detected! "
+            f"Diagonal wires cause Logisim to hang in an infinite heap allocation loop."
+        )
+
+    print("[PASS] Manhattan Enforcer test passed (all diagonal wires decomposed, zero diagonals in XML)")
+
+
+def test_groq_client():
+    from agent.groq_client import GroqClient, _extract_json_response, AVAILABLE_GROQ_MODELS
+
+    # Verify requested models exist in available roster
+    model_ids = [m["id"] for m in AVAILABLE_GROQ_MODELS]
+    assert "qwen/qwen3.8-27b" in model_ids, "Missing Qwen 3.8 model in Groq roster"
+    assert "llama-3.3-70b-versatile" in model_ids, "Missing Llama 3.3 70B model in Groq roster"
+
+    # Test 1: Markdown code block parsing
+    sample_md = "```json\n{\"thought\": \"Routing adder\", \"response\": \"Adder built.\", \"actions\": [{\"action\": \"open_in_logisim\"}]}\n```"
+    p1 = _extract_json_response(sample_md)
+    assert p1.get("thought") == "Routing adder"
+    assert p1.get("response") == "Adder built."
+    assert len(p1.get("actions", [])) == 1
+
+    # Test 2: Chain of thought <think> tag extraction (Qwen / DeepSeek reasoning)
+    sample_think = "<think>Calculating carry bits for adder</think>\n{\"response\": \"Calculated\", \"actions\": []}"
+    p2 = _extract_json_response(sample_think)
+    assert p2.get("thought") == "Calculating carry bits for adder"
+    assert p2.get("response") == "Calculated"
+
+    # Test 3: Client instantiation and credentials
+    client = GroqClient(api_key="gsk_test", model_id="qwen/qwen3.8-27b")
+    assert client.model_id == "qwen/qwen3.8-27b"
+    client.set_credentials("gsk_test2", "llama-3.3-70b-versatile")
+    assert client.model_id == "llama-3.3-70b-versatile"
+
+    # Test 4: Empty API key check
+    empty_client = GroqClient(api_key="")
+    res = empty_client.generate_chat_response([{"role": "user", "content": "test"}])
+    assert res["success"] is False
+    assert "No Groq API key" in res["error"]
+
+    print("[PASS] Groq Client test passed (Qwen 3.8 & Llama 3.3 models verified, JSON/CoT parsing clean)")
+
+
 if __name__ == "__main__":
     print("Running AI Logisim Controller Test Suite...")
     test_circ_builder()
@@ -288,6 +353,8 @@ if __name__ == "__main__":
     test_width_aware_snapping()
     test_mux_4to1_snapping()
     test_erc_cross_width_pruning()
+    test_manhattan_enforcement()
+    test_groq_client()
     test_driver()
     print("\nALL TESTS PASSED SUCCESSFULLY!")
 

@@ -128,9 +128,32 @@ Logisim 2.7.1 Component Coordinate & Terminal Rules:
   - Outputs on the right side:
     - Code OUT (select bits) is at (x, y) [e.g. (200, 150)]
     - Group Signal GS (AnyActive, 1-bit output) is at (x, y + 10) [e.g. (200, 160)]
-- Register & Counter:
-  - Output Q is at (x, y).
-  - Data input D at (x-30, y), Clock at (x-20, y+20), Clear at (x-10, y+20).
+- Decoder (Plexers, loc=(x, y)):
+  - Decodes an n-bit select input into 2^n one-hot 1-bit output lines.
+  - Select input (bit width = select_bits, e.g. 2 for 2-to-4 decoder) is at (x, y).
+  - 1-bit Outputs on the right side:
+    - Out0 at (x+30, y-10)
+    - Out1 at (x+30, y+10)
+    - Out2 at (x+30, y+30)
+    - Out3 at (x+30, y+50)
+- Demultiplexer (Plexers, loc=(x, y)):
+  - Routes single data input to one of 2^n output lines based on select.
+  - Data input is at (x, y), Select at (x+20, y+20).
+  - Outputs on the right side: Out_k at (x+30, y - 10 + k*20).
+- Register (Memory, loc=(x, y)):
+  - Output Q is at (x, y) [data width].
+  - Data input D is at (x-30, y) [data width].
+  - Enable input (load / write enable) is at (x-30, y+10) [1-bit]! (CRITICAL: Active-high load enable. When Enable=1 on a clock rising edge, D is stored into Q! Always wire WriteEnable / address-decode logic to this Enable terminal!)
+  - Clock input is at (x-20, y+20) [1-bit]! (Wire clean master CLK signal directly here; do not gate the clock line!)
+  - Clear input is at (x-10, y+20) [1-bit]!
+- Memory & Register Bank Architecture (e.g. 4-register file):
+  - Stack registers vertically (e.g. Reg0 at [380, 100], Reg1 at [380, 180], Reg2 at [380, 260], Reg3 at [380, 340]).
+  - Connect shared DataIn bus in parallel to all register D inputs at (x-30, y).
+  - Connect master CLK bus in parallel directly to all register Clock inputs at (x-20, y+20).
+  - Route Address to a Decoder or AND gating logic combined with WriteEnable to drive each register's Enable pin at (x-30, y+10).
+  - Route all register Q outputs into a Multiplexer (driven by Address) to output the selected register's value to DataOut!
+- Counter:
+  - Output Q at (x, y), Data at (x-30, y), Clock at (x-20, y+20), Clear at (x-10, y+20), Load at (x-30, y-10), Count_en at (x-30, y+10).
 - D Flip-Flop:
   - Data input D at (x-40, y), Clock at (x-40, y+20).
   - Q output at (x, y), ~Q (inverted) at (x, y+20).
@@ -174,6 +197,9 @@ CRITICAL RULES:
 - NEVER refuse a circuit request by claiming you only support single-bit or basic gates. You have full advanced capability to synthesize multi-bit buses, splitters, ALUs, multiplexers, and registers!
 - Always pair `build_custom_circuit` or `build_template` with `open_in_logisim` so the result immediately appears on the user's Logisim desktop canvas.
 - Ensure all wire coordinates align precisely with the terminal rules above.
+- STRICT MANHATTAN ROUTING:
+  - All wire segments MUST be strictly orthogonal (purely horizontal where y1 == y2, or purely vertical where x1 == x2).
+  - NEVER specify diagonal wires (where both x and y change in the same segment)! Any right-angle bend must be expressed as two separate orthogonal wire segments!
 - BUS ISOLATION & BIT WIDTH INTEGRITY:
   - Multi-bit data buses (e.g. 8-bit, 16-bit A, B, Sum) and control lines (1-bit Carry/Clock/Reset or 2-bit OpCode/Select) must NEVER share coordinate lines or vertical routing trunks.
   - Route control lines on separate coordinate columns outside data trunks, or use Tunnels (e.g. {"type": "Tunnel", "loc": [x, y], "label": "T1", "width": width}) to route buses cleanly across the canvas without wire crossing conflicts!

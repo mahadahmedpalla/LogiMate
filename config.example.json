@@ -1,7 +1,11 @@
 {
+  "ai_provider": "gemini",
   "gemini_api_key": "",
   "gemini_model": "gemini-3.6-flash",
+  "groq_api_key": "",
+  "groq_model": "qwen/qwen3.8-27b",
   "custom_model": "",
+  "thinking_budget": 1024,
   "canvas_offset_x": 200,
   "canvas_offset_y": 70
 }

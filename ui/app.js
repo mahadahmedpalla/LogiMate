@@ -57,14 +57,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeSettingsBtn = document.getElementById("close-settings-btn");
   const cancelSettingsBtn = document.getElementById("cancel-settings-btn");
   const settingsForm = document.getElementById("settings-form");
+  const cfgProviderSelect = document.getElementById("cfg-provider-select");
+  const geminiSettingsGroup = document.getElementById("gemini-settings-group");
+  const groqSettingsGroup = document.getElementById("groq-settings-group");
   const cfgApiKey = document.getElementById("cfg-api-key");
+  const cfgGroqKey = document.getElementById("cfg-groq-key");
   const cfgModelSelect = document.getElementById("cfg-model-select");
+  const cfgGroqModelSelect = document.getElementById("cfg-groq-model-select");
   const customModelGroup = document.getElementById("custom-model-group");
   const cfgCustomModel = document.getElementById("cfg-custom-model");
   const cfgThinkingBudget = document.getElementById("cfg-thinking-budget");
   const cfgOffsetX = document.getElementById("cfg-offset-x");
   const cfgOffsetY = document.getElementById("cfg-offset-y");
   const toggleKeyVis = document.getElementById("toggle-key-vis");
+  const toggleGroqKeyVis = document.getElementById("toggle-groq-key-vis");
   const btnTestConnection = document.getElementById("btn-test-connection");
   const testResultBadge = document.getElementById("test-result-badge");
 
@@ -102,10 +108,12 @@ document.addEventListener("DOMContentLoaded", () => {
         apiKeyBadge.className = "api-key-badge";
       }
 
-      // Model display
+      // Model & Provider display
+      const isGroq = (data.ai_provider || "gemini").toLowerCase() === "groq";
       const modelDisplayName = getModelDisplayName(data.model_id);
-      modelTagHeader.textContent = modelDisplayName;
-      activeModelPill.textContent = modelDisplayName;
+      const headerText = isGroq ? `Groq: ${modelDisplayName}` : modelDisplayName;
+      modelTagHeader.textContent = headerText;
+      activeModelPill.textContent = headerText;
 
       // Circuit presence
       if (data.active_circuit) {
@@ -129,7 +137,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getModelDisplayName(id) {
-    if (!id) return "Gemini";
+    if (!id) return "AI Model";
+    if (id.includes("qwen")) return "Qwen 3.8 27B";
+    if (id.includes("llama-3.3-70b")) return "Llama 3.3 70B";
+    if (id.includes("llama-3.1-8b")) return "Llama 3.1 8B";
+    if (id.includes("deepseek-r1")) return "DeepSeek R1 70B";
+    if (id.includes("deepseek")) return "DeepSeek";
     if (id.includes("3.8")) return "Gemini 3.8 Flash";
     if (id.includes("3.7")) return "Gemini 3.7 Flash";
     if (id.includes("3.6")) return "Gemini 3.6 Flash";
@@ -631,20 +644,88 @@ document.addEventListener("DOMContentLoaded", () => {
   // Settings Modal Handlers
   // ----------------------------------------------------
 
+  function updateCustomModelVisibility() {
+    const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
+    let isCustom = false;
+    if (provider === "groq") {
+      isCustom = cfgGroqModelSelect && cfgGroqModelSelect.value === "custom";
+    } else {
+      isCustom = cfgModelSelect && cfgModelSelect.value === "custom";
+    }
+    if (isCustom) {
+      customModelGroup.classList.remove("hidden");
+    } else {
+      customModelGroup.classList.add("hidden");
+    }
+  }
+
+  function toggleProviderUI(provider) {
+    if (provider === "groq") {
+      geminiSettingsGroup.classList.add("hidden");
+      groqSettingsGroup.classList.remove("hidden");
+    } else {
+      geminiSettingsGroup.classList.remove("hidden");
+      groqSettingsGroup.classList.add("hidden");
+    }
+    updateCustomModelVisibility();
+  }
+
+  if (cfgProviderSelect) {
+    cfgProviderSelect.addEventListener("change", () => {
+      toggleProviderUI(cfgProviderSelect.value);
+    });
+  }
+
+  if (cfgModelSelect) {
+    cfgModelSelect.addEventListener("change", () => {
+      updateCustomModelVisibility();
+      if (cfgModelSelect.value === "custom") cfgCustomModel.focus();
+    });
+  }
+
+  if (cfgGroqModelSelect) {
+    cfgGroqModelSelect.addEventListener("change", () => {
+      updateCustomModelVisibility();
+      if (cfgGroqModelSelect.value === "custom") cfgCustomModel.focus();
+    });
+  }
+
+  if (toggleGroqKeyVis && cfgGroqKey) {
+    toggleGroqKeyVis.addEventListener("click", () => {
+      cfgGroqKey.type = cfgGroqKey.type === "password" ? "text" : "password";
+    });
+  }
+
   async function loadSettings() {
     try {
       const res = await fetch("/api/settings");
       if (!res.ok) return;
       const data = await res.json();
 
+      const provider = (data.ai_provider || "gemini").toLowerCase();
+      if (cfgProviderSelect) cfgProviderSelect.value = provider;
+      toggleProviderUI(provider);
+
+      // Gemini Model selection
       if (data.gemini_model === "custom" || !["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite"].includes(data.gemini_model)) {
         cfgModelSelect.value = "custom";
-        customModelGroup.classList.remove("hidden");
-        cfgCustomModel.value = data.custom_model || data.gemini_model;
       } else {
         cfgModelSelect.value = data.gemini_model;
-        customModelGroup.classList.add("hidden");
       }
+
+      // Groq Model selection
+      if (cfgGroqModelSelect) {
+        if (data.groq_model === "custom" || !["qwen/qwen3.8-27b", "llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b", "llama-3.1-8b-instant"].includes(data.groq_model)) {
+          cfgGroqModelSelect.value = "custom";
+        } else {
+          cfgGroqModelSelect.value = data.groq_model || "qwen/qwen3.8-27b";
+        }
+      }
+
+      if (data.custom_model) {
+        cfgCustomModel.value = data.custom_model;
+      }
+      updateCustomModelVisibility();
 
       cfgOffsetX.value = data.canvas_offset_x || 200;
       cfgOffsetY.value = data.canvas_offset_y || 70;
@@ -653,6 +734,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (data.gemini_api_key) {
         cfgApiKey.placeholder = `Configured (${data.gemini_api_key})`;
+      }
+      if (cfgGroqKey && data.groq_api_key) {
+        cfgGroqKey.placeholder = `Configured (${data.groq_api_key})`;
       }
     } catch (e) {
       console.warn("Failed to load settings:", e);
@@ -672,35 +756,37 @@ document.addEventListener("DOMContentLoaded", () => {
     cfgApiKey.type = cfgApiKey.type === "password" ? "text" : "password";
   });
 
-  cfgModelSelect.addEventListener("change", () => {
-    if (cfgModelSelect.value === "custom") {
-      customModelGroup.classList.remove("hidden");
-      cfgCustomModel.focus();
-    } else {
-      customModelGroup.classList.add("hidden");
-    }
-  });
-
   btnTestConnection.addEventListener("click", async () => {
     testResultBadge.className = "test-result-badge";
     testResultBadge.textContent = "Testing...";
     testResultBadge.classList.remove("hidden");
 
-    const key = cfgApiKey.value.trim();
-    let model = cfgModelSelect.value;
-    if (model === "custom") {
-      model = cfgCustomModel.value.trim();
+    const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
+    const payload = { ai_provider: provider };
+
+    if (provider === "groq") {
+      payload.groq_api_key = cfgGroqKey.value.trim();
+      let model = cfgGroqModelSelect.value;
+      if (model === "custom") {
+        model = cfgCustomModel.value.trim();
+      }
+      payload.groq_model = model;
+      payload.custom_model = cfgCustomModel.value.trim();
+    } else {
+      payload.gemini_api_key = cfgApiKey.value.trim();
+      let model = cfgModelSelect.value;
+      if (model === "custom") {
+        model = cfgCustomModel.value.trim();
+      }
+      payload.gemini_model = model;
+      payload.custom_model = cfgCustomModel.value.trim();
     }
 
     try {
       const res = await fetch("/api/test-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          gemini_api_key: key,
-          gemini_model: model,
-          custom_model: cfgCustomModel.value.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
@@ -718,8 +804,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   settingsForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
     const payload = {
+      ai_provider: provider,
       gemini_model: cfgModelSelect.value,
+      groq_model: cfgGroqModelSelect ? cfgGroqModelSelect.value : "qwen/qwen3.8-27b",
       custom_model: cfgCustomModel.value.trim(),
       thinking_budget: cfgThinkingBudget ? parseInt(cfgThinkingBudget.value, 10) : 1024,
       canvas_offset_x: parseInt(cfgOffsetX.value, 10) || 200,
@@ -727,6 +816,9 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     if (cfgApiKey.value.trim()) {
       payload.gemini_api_key = cfgApiKey.value.trim();
+    }
+    if (cfgGroqKey && cfgGroqKey.value.trim()) {
+      payload.groq_api_key = cfgGroqKey.value.trim();
     }
 
     try {

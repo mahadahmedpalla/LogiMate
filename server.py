@@ -13,7 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from logisim_engine.driver import LogisimDriver
-from agent.gemini_client import GeminiClient, AVAILABLE_MODELS
+from agent.gemini_client import GeminiClient, AVAILABLE_MODELS as AVAILABLE_GEMINI_MODELS
+from agent.groq_client import GroqClient, AVAILABLE_GROQ_MODELS
 from agent.controller_agent import ControllerAgent
 
 
@@ -41,8 +42,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def load_config() -> Dict[str, Any]:
     default_config = {
+        "ai_provider": "gemini",  # "gemini" or "groq"
         "gemini_api_key": "",
         "gemini_model": "gemini-3.6-flash",
+        "groq_api_key": "",
+        "groq_model": "qwen/qwen3.8-27b",
         "custom_model": "",
         "thinking_budget": 1024,
         "canvas_offset_x": 200,
@@ -60,6 +64,10 @@ def load_config() -> Dict[str, Any]:
     if default_config.get("gemini_model") in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"):
         default_config["gemini_model"] = "gemini-3.6-flash"
 
+    # Auto-migrate openrouter -> groq if previously selected
+    if default_config.get("ai_provider") == "openrouter":
+        default_config["ai_provider"] = "groq"
+
     return default_config
 
 
@@ -70,8 +78,9 @@ def save_config(cfg: Dict[str, Any]):
 
 config = load_config()
 
-# Initialize Driver, Gemini, and Agent
-active_model = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
+# Initialize Driver, Gemini, Groq, and Agent
+active_gemini_model = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
+active_groq_model = config.get("custom_model") if config.get("groq_model") == "custom" and config.get("custom_model") else config.get("groq_model", "qwen/qwen3.8-27b")
 
 driver = LogisimDriver(
     canvas_offset_x=config.get("canvas_offset_x", 200),
@@ -80,12 +89,20 @@ driver = LogisimDriver(
 
 gemini = GeminiClient(
     api_key=config.get("gemini_api_key", ""),
-    model_id=active_model,
+    model_id=active_gemini_model,
     thinking_budget=int(config.get("thinking_budget", 1024)),
 )
 
+groq = GroqClient(
+    api_key=config.get("groq_api_key", ""),
+    model_id=active_groq_model,
+)
+
+current_provider = config.get("ai_provider", "gemini").lower()
+active_client = groq if current_provider == "groq" else gemini
+
 agent = ControllerAgent(
-    gemini_client=gemini,
+    gemini_client=active_client,
     driver=driver,
     workspace_dir=OUTPUT_DIR,
 )
@@ -95,8 +112,11 @@ app = FastAPI(title="AI Logisim Controller")
 
 # Request Models
 class SettingsPayload(BaseModel):
+    ai_provider: Optional[str] = None
     gemini_api_key: Optional[str] = None
     gemini_model: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    groq_model: Optional[str] = None
     custom_model: Optional[str] = None
     thinking_budget: Optional[int] = None
     canvas_offset_x: Optional[int] = None
@@ -123,11 +143,16 @@ CURRENT_VERSION = "1.0.0"
 @app.get("/api/status")
 def get_status():
     win_info = driver.get_window_info()
+    provider = config.get("ai_provider", "gemini").lower()
+    active_client = groq if provider == "groq" else gemini
     return {
         "logisim": win_info,
-        "has_api_key": bool(gemini.api_key),
-        "model_id": gemini.model_id,
-        "available_models": AVAILABLE_MODELS,
+        "ai_provider": provider,
+        "has_api_key": bool(active_client.api_key),
+        "model_id": active_client.model_id,
+        "available_models": AVAILABLE_GROQ_MODELS if provider == "groq" else AVAILABLE_GEMINI_MODELS,
+        "available_gemini_models": AVAILABLE_GEMINI_MODELS,
+        "available_groq_models": AVAILABLE_GROQ_MODELS,
         "active_circuit": os.path.exists(agent.current_circ_path),
         "active_pins": agent.active_pin_map,
     }
@@ -135,28 +160,45 @@ def get_status():
 
 @app.get("/api/settings")
 def get_settings():
-    masked_key = ""
+    masked_gemini_key = ""
     if config.get("gemini_api_key"):
         k = config["gemini_api_key"]
-        masked_key = k[:4] + "..." + k[-4:] if len(k) > 8 else "***"
+        masked_gemini_key = k[:4] + "..." + k[-4:] if len(k) > 8 else "***"
+
+    masked_groq_key = ""
+    if config.get("groq_api_key"):
+        k = config["groq_api_key"]
+        masked_groq_key = k[:4] + "..." + k[-4:] if len(k) > 8 else "***"
+
     return {
-        "gemini_api_key": masked_key,
+        "ai_provider": config.get("ai_provider", "gemini"),
+        "gemini_api_key": masked_gemini_key,
         "gemini_model": config.get("gemini_model", "gemini-3.6-flash"),
+        "groq_api_key": masked_groq_key,
+        "groq_model": config.get("groq_model", "qwen/qwen3.8-27b"),
         "custom_model": config.get("custom_model", ""),
         "thinking_budget": config.get("thinking_budget", 1024),
         "canvas_offset_x": driver.canvas_offset_x,
         "canvas_offset_y": driver.canvas_offset_y,
-        "available_models": AVAILABLE_MODELS,
+        "available_models": AVAILABLE_GEMINI_MODELS,
+        "available_gemini_models": AVAILABLE_GEMINI_MODELS,
+        "available_groq_models": AVAILABLE_GROQ_MODELS,
     }
 
 
 @app.post("/api/settings")
 def update_settings(payload: SettingsPayload):
     global config
+    if payload.ai_provider is not None and payload.ai_provider.strip():
+        config["ai_provider"] = payload.ai_provider.strip().lower()
     if payload.gemini_api_key is not None and payload.gemini_api_key.strip():
         config["gemini_api_key"] = payload.gemini_api_key.strip()
     if payload.gemini_model is not None:
         config["gemini_model"] = payload.gemini_model.strip()
+    if payload.groq_api_key is not None and payload.groq_api_key.strip():
+        config["groq_api_key"] = payload.groq_api_key.strip()
+    if payload.groq_model is not None:
+        config["groq_model"] = payload.groq_model.strip()
     if payload.custom_model is not None:
         config["custom_model"] = payload.custom_model.strip()
     if payload.thinking_budget is not None:
@@ -171,25 +213,43 @@ def update_settings(payload: SettingsPayload):
     save_config(config)
 
     # Update runtime objects
-    model_to_use = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
+    model_to_use_gemini = config.get("custom_model") if config.get("gemini_model") == "custom" and config.get("custom_model") else config.get("gemini_model", "gemini-3.6-flash")
     gemini.set_credentials(
         api_key=config.get("gemini_api_key", ""),
-        model_id=model_to_use,
+        model_id=model_to_use_gemini,
         thinking_budget=int(config.get("thinking_budget", 1024)),
     )
+
+    model_to_use_groq = config.get("custom_model") if config.get("groq_model") == "custom" and config.get("custom_model") else config.get("groq_model", "qwen/qwen3.8-27b")
+    groq.set_credentials(
+        api_key=config.get("groq_api_key", ""),
+        model_id=model_to_use_groq,
+    )
+
+    # Route agent to active provider
+    current_provider = config.get("ai_provider", "gemini").lower()
+    agent.client = groq if current_provider == "groq" else gemini
 
     return {"success": True, "message": "Settings saved successfully."}
 
 
 @app.post("/api/test-key")
 def test_key(payload: SettingsPayload):
-    key = payload.gemini_api_key.strip() if payload.gemini_api_key else config.get("gemini_api_key", "")
-    model = payload.gemini_model.strip() if payload.gemini_model else config.get("gemini_model", "gemini-3.6-flash")
-    if model == "custom" and payload.custom_model:
-        model = payload.custom_model.strip()
-
-    test_client = GeminiClient(api_key=key, model_id=model)
-    return test_client.test_connection()
+    provider = (payload.ai_provider or config.get("ai_provider", "gemini")).lower()
+    if provider == "groq":
+        key = payload.groq_api_key.strip() if payload.groq_api_key else config.get("groq_api_key", "")
+        model = payload.groq_model.strip() if payload.groq_model else config.get("groq_model", "qwen/qwen3.8-27b")
+        if model == "custom" and payload.custom_model:
+            model = payload.custom_model.strip()
+        test_client = GroqClient(api_key=key, model_id=model)
+        return test_client.test_connection()
+    else:
+        key = payload.gemini_api_key.strip() if payload.gemini_api_key else config.get("gemini_api_key", "")
+        model = payload.gemini_model.strip() if payload.gemini_model else config.get("gemini_model", "gemini-3.6-flash")
+        if model == "custom" and payload.custom_model:
+            model = payload.custom_model.strip()
+        test_client = GeminiClient(api_key=key, model_id=model)
+        return test_client.test_connection()
 
 
 @app.post("/api/chat")

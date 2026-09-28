@@ -214,7 +214,7 @@ class ControllerAgent:
 
     def __init__(
         self,
-        gemini_client: GeminiClient,
+        gemini_client: Any,
         driver: LogisimDriver,
         workspace_dir: str = "output",
     ):
@@ -230,12 +230,12 @@ class ControllerAgent:
 
     def execute_prompt(self, user_prompt: str) -> Dict[str, Any]:
         """
-        Processes a user request through Gemini and executes corresponding actions.
+        Processes a user request through configured LLM and executes corresponding actions.
         Returns detailed execution report.
         """
         self.conversation_history.append({"role": "user", "content": user_prompt})
 
-        # Call Gemini
+        # Call configured LLM client
         result = self.client.generate_chat_response(
             messages=self.conversation_history,
             system_instruction=SYSTEM_PROMPT,
@@ -246,7 +246,7 @@ class ControllerAgent:
                 "success": False,
                 "error": result.get("error", "Failed to generate AI response."),
                 "thought": "",
-                "response": result.get("error") or "Could not contact Gemini. Please verify your API key and model in Settings.",
+                "response": result.get("error") or "Could not contact AI model. Please verify your API key and model in Settings.",
                 "executed_actions": [],
             }
 
