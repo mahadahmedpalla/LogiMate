@@ -66,6 +66,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const cfgGroqModelSelect = document.getElementById("cfg-groq-model-select");
   const customModelGroup = document.getElementById("custom-model-group");
   const cfgCustomModel = document.getElementById("cfg-custom-model");
+  const cfgLogisimPath = document.getElementById("cfg-logisim-path");
+  const cfgLogisimStatusHint = document.getElementById("cfg-logisim-status-hint");
   const cfgThinkingBudget = document.getElementById("cfg-thinking-budget");
   const cfgOffsetX = document.getElementById("cfg-offset-x");
   const cfgOffsetY = document.getElementById("cfg-offset-y");
@@ -727,6 +729,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       updateCustomModelVisibility();
 
+      if (cfgLogisimPath) {
+        cfgLogisimPath.value = data.logisim_path || "";
+        if (data.detected_logisim_path) {
+          const isBundled = data.bundled_logisim ? " (Bundled 2.7.1 Active)" : "";
+          cfgLogisimPath.placeholder = `${data.detected_logisim_path}${isBundled}`;
+          if (cfgLogisimStatusHint) {
+            cfgLogisimStatusHint.textContent = data.bundled_logisim
+              ? `✅ Bundled Logisim 2.7.1 active at: ${data.detected_logisim_path}`
+              : `🔍 Discovered Logisim at: ${data.detected_logisim_path}`;
+            cfgLogisimStatusHint.style.color = "#34d399";
+          }
+        }
+      }
+
       cfgOffsetX.value = data.canvas_offset_x || 200;
       cfgOffsetY.value = data.canvas_offset_y || 70;
       if (cfgThinkingBudget && data.thinking_budget !== undefined) {
@@ -810,6 +826,7 @@ document.addEventListener("DOMContentLoaded", () => {
       gemini_model: cfgModelSelect.value,
       groq_model: cfgGroqModelSelect ? cfgGroqModelSelect.value : "qwen/qwen3.8-27b",
       custom_model: cfgCustomModel.value.trim(),
+      logisim_path: cfgLogisimPath ? cfgLogisimPath.value.trim() : "",
       thinking_budget: cfgThinkingBudget ? parseInt(cfgThinkingBudget.value, 10) : 1024,
       canvas_offset_x: parseInt(cfgOffsetX.value, 10) || 200,
       canvas_offset_y: parseInt(cfgOffsetY.value, 10) || 70,

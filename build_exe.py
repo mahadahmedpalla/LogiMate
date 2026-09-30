@@ -20,6 +20,7 @@ def build():
         "--name", "AI_Logisim_Controller",
         "--icon=app_icon.ico",
         "--add-data", "ui;ui",
+        "--add-data", "logisim;logisim",
         "--collect-all", "google.genai",
         "--collect-all", "webview",
         "--collect-all", "uvicorn",
@@ -63,6 +64,11 @@ def build():
     ui_dest = os.path.join(dist_dir, "ui")
     shutil.copytree("ui", ui_dest, dirs_exist_ok=True)
     print("Copied updated ui to dist/AI_Logisim_Controller/ui")
+
+    logisim_dest = os.path.join(dist_dir, "logisim")
+    if os.path.exists("logisim"):
+        shutil.copytree("logisim", logisim_dest, dirs_exist_ok=True)
+        print("Copied bundled logisim to dist/AI_Logisim_Controller/logisim")
 
     icon_dest = os.path.join(dist_dir, "app_icon.ico")
     shutil.copy2("app_icon.ico", icon_dest)

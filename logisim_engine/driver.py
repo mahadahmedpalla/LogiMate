@@ -2,13 +2,19 @@
 Logisim 2.7.1 Windows Automation Driver.
 Handles window discovery, foreground focusing, shortcut commands,
 and pixel-exact canvas coordinate clicking for pin poking.
+Includes comprehensive Logisim and Java discovery, bundled Logisim fallback,
+and zero-keystroke direct circuit loading.
 """
 
 import os
+import sys
+import glob
 import time
 import base64
+import shutil
+import subprocess
 from io import BytesIO
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import pygetwindow as gw
 import pyautogui
 from PIL import Image
@@ -16,6 +22,8 @@ from PIL import Image
 try:
     import win32gui
     import win32con
+    import win32process
+    import ctypes
     HAS_WIN32 = True
 except ImportError:
     HAS_WIN32 = False
@@ -31,6 +39,130 @@ DEFAULT_POKE_TOOL_X = 22
 DEFAULT_POKE_TOOL_Y = 58
 
 
+def find_java() -> Optional[str]:
+    """
+    Finds javaw or java executable on the system.
+    Searches PATH, JAVA_HOME, and standard 64-bit/32-bit Java installation directories.
+    """
+    for name in ["javaw", "java"]:
+        p = shutil.which(name)
+        if p:
+            return p
+
+    if os.environ.get("JAVA_HOME"):
+        for name in ["javaw.exe", "java.exe"]:
+            p = os.path.join(os.environ["JAVA_HOME"], "bin", name)
+            if os.path.exists(p):
+                return p
+
+    search_patterns = [
+        r"C:\Program Files\Common Files\Oracle\Java\javapath\javaw.exe",
+        r"C:\Program Files\Java\*\bin\javaw.exe",
+        r"C:\Program Files (x86)\Java\*\bin\javaw.exe",
+        r"C:\Program Files\Eclipse Adoptium\*\bin\javaw.exe",
+        r"C:\Program Files\Amazon Corretto\*\bin\javaw.exe",
+        r"C:\Program Files\Zulu\*\bin\javaw.exe",
+        r"C:\Program Files\Microsoft\*\bin\javaw.exe",
+    ]
+    for pat in search_patterns:
+        matches = glob.glob(pat)
+        if matches:
+            return matches[0]
+
+    return None
+
+
+def find_logisim_exe(custom_path: Optional[str] = None) -> Optional[str]:
+    """
+    Discovers Logisim 2.7.1 executable or jar across all standard and bundled locations:
+    1. Explicit custom user path
+    2. Bundled logisim folder in application root / distribution
+    3. User Downloads, Desktop, Documents (case-insensitive search for *logisim*.exe or *logisim*.jar)
+    4. Program Files
+    5. PATH
+    6. Fallback legacy paths
+    """
+    if custom_path and os.path.exists(custom_path):
+        return os.path.abspath(custom_path)
+
+    base_dirs: List[str] = []
+
+    # 1. Check frozen app directory (PyInstaller dist / installed folder)
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        meipass = getattr(sys, "_MEIPASS", "")
+        base_dirs.extend([
+            os.path.join(exe_dir, "logisim"),
+            exe_dir,
+            meipass,
+            os.path.join(meipass, "logisim"),
+        ])
+
+    # 2. Check source development directory
+    mod_dir = os.path.dirname(os.path.abspath(__file__))
+    app_root = os.path.abspath(os.path.join(mod_dir, ".."))
+    parent_dir = os.path.abspath(os.path.join(app_root, ".."))
+    base_dirs.extend([
+        os.path.join(app_root, "logisim"),
+        app_root,
+        os.path.join(parent_dir, "logisim"),
+        parent_dir,
+    ])
+
+    standard_logisim_names = [
+        "logisim-win-2.7.1.exe",
+        "logisim-win-2.7.1 (1).exe",
+        "logisim-win-2.7.1 (2).exe",
+        "logisim.exe",
+        "logisim.jar",
+        "logisim-generic-2.7.1.jar",
+    ]
+
+    for bd in base_dirs:
+        if not bd or not os.path.exists(bd):
+            continue
+        for fname in standard_logisim_names:
+            p = os.path.join(bd, fname)
+            if os.path.exists(p):
+                return os.path.abspath(p)
+
+    # 3. Check user standard directories (Downloads, Desktop, Documents)
+    user_dirs = [
+        os.path.expanduser(r"~\Downloads"),
+        os.path.expanduser(r"~\Desktop"),
+        os.path.expanduser(r"~\Documents"),
+        r"C:\Program Files\Logisim",
+        r"C:\Program Files (x86)\Logisim",
+    ]
+    for ud in user_dirs:
+        if not os.path.exists(ud):
+            continue
+        for ext in ["*.exe", "*.jar"]:
+            for match in glob.glob(os.path.join(ud, f"*logisim*{ext}")):
+                # Avoid matching AI_Logisim_Controller itself
+                if "ai_logisim_controller" in os.path.basename(match).lower():
+                    continue
+                if os.path.exists(match):
+                    return os.path.abspath(match)
+
+    # 4. Check system PATH
+    for cmd in ["logisim", "logisim.exe"]:
+        p = shutil.which(cmd)
+        if p and "ai_logisim_controller" not in p.lower():
+            return os.path.abspath(p)
+
+    # 5. Legacy developer fallbacks
+    fallbacks = [
+        r"f:\original final downloads\logisim-win-2.7.1 (1).exe",
+        r"f:\original final downloads\logisim-win-2.7.1.exe",
+    ]
+    for fb in fallbacks:
+        if os.path.exists(fb):
+            return os.path.abspath(fb)
+
+    return None
+
+
 class LogisimDriver:
     """Controls the local Logisim 2.7.1 desktop application."""
 
@@ -38,38 +170,80 @@ class LogisimDriver:
         self,
         canvas_offset_x: int = DEFAULT_CANVAS_OFFSET_X,
         canvas_offset_y: int = DEFAULT_CANVAS_OFFSET_Y,
+        custom_logisim_path: Optional[str] = None,
     ):
         self.canvas_offset_x = canvas_offset_x
         self.canvas_offset_y = canvas_offset_y
+        self.custom_logisim_path = custom_logisim_path
         self.poke_tool_offset = (DEFAULT_POKE_TOOL_X, DEFAULT_POKE_TOOL_Y)
         pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.05
 
-    def launch_logisim(self) -> bool:
-        """Launches Logisim 2.7.1 using installed 64-bit Java (bypasses 32-bit Launch4j issue)."""
-        # If Logisim is already running, simply focus it without spawning another JVM
-        if self.find_window():
+    def find_logisim_exe(self) -> Optional[str]:
+        """Discovers Logisim 2.7.1 executable or jar."""
+        return find_logisim_exe(self.custom_logisim_path)
+
+    def is_bundled(self) -> bool:
+        """Returns True if Logisim was found inside the application's own bundled directory."""
+        exe = self.find_logisim_exe()
+        if not exe:
+            return False
+        exe_lower = exe.lower()
+        # Check if inside app directory
+        app_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..")).lower()
+        if app_root in exe_lower or "\\logisim\\" in exe_lower:
+            return True
+        if getattr(sys, "frozen", False):
+            inst_dir = os.path.dirname(sys.executable).lower()
+            if inst_dir in exe_lower:
+                return True
+        return False
+
+    def _spawn_logisim(self, exe_path: str, circuit_path: Optional[str] = None) -> bool:
+        """Spawns Logisim using Java or direct executable execution."""
+        java_cmd = find_java()
+        args = []
+
+        if java_cmd:
+            args = [java_cmd, "-jar", exe_path, "-nosplash"]
+        else:
+            args = [exe_path]
+
+        if circuit_path and os.path.exists(circuit_path):
+            args.append(os.path.abspath(circuit_path))
+
+        try:
+            subprocess.Popen(args)
+            time.sleep(0.8)
             self.focus()
             return True
-
-        possible_paths = [
-            r"f:\original final downloads\logisim-win-2.7.1 (1).exe",
-            r"f:\original final downloads\logisim-win-2.7.1.exe",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logisim-win-2.7.1 (1).exe")),
-            os.path.expanduser(r"~\Downloads\logisim-win-2.7.1 (1).exe"),
-            os.path.expanduser(r"~\Downloads\logisim-win-2.7.1.exe"),
-        ]
-        for p in possible_paths:
-            if os.path.exists(p):
-                import subprocess
+        except Exception:
+            # Fallback: if java command failed, try direct execution of .exe
+            if java_cmd and exe_path.lower().endswith(".exe"):
                 try:
-                    subprocess.Popen(["javaw", "-jar", p, "-nosplash"])
-                    time.sleep(0.5)
+                    direct_args = [exe_path]
+                    if circuit_path and os.path.exists(circuit_path):
+                        direct_args.append(os.path.abspath(circuit_path))
+                    subprocess.Popen(direct_args)
+                    time.sleep(0.8)
                     self.focus()
                     return True
                 except Exception:
                     pass
         return False
+
+    def launch_logisim(self) -> bool:
+        """Launches Logisim 2.7.1 using discovered or bundled executable."""
+        # If Logisim is already running, simply focus it without spawning another instance
+        if self.find_window():
+            self.focus()
+            return True
+
+        exe_path = self.find_logisim_exe()
+        if not exe_path:
+            return False
+
+        return self._spawn_logisim(exe_path)
 
     def find_window(self) -> Optional[gw.Win32Window]:
         """Finds active Logisim window, strictly excluding the AI Logisim Controller app window."""
@@ -114,32 +288,49 @@ class LogisimDriver:
         }
 
     def focus(self) -> bool:
-        """Brings the Logisim window to the foreground."""
+        """
+        Brings the Logisim window to the foreground.
+        Uses Win32 thread input attachment to bypass Windows ASFW foreground lock.
+        """
         win = self.find_window()
         if not win:
             return False
 
-        try:
-            if HAS_WIN32:
+        if HAS_WIN32:
+            try:
                 hwnd = win._hWnd
-                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                try:
-                    win32gui.SetForegroundWindow(hwnd)
-                except Exception:
-                    # Workaround for Windows foreground lock: press alt and retry
-                    pyautogui.press("alt")
-                    time.sleep(0.05)
-                    win32gui.SetForegroundWindow(hwnd)
-            else:
-                win.activate()
-            time.sleep(0.2)
+                if win32gui.GetForegroundWindow() == hwnd:
+                    return True
+
+                if win32gui.IsIconic(hwnd):
+                    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                else:
+                    win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
+
+                fore_hwnd = win32gui.GetForegroundWindow()
+                fore_thread, _ = win32process.GetWindowThreadProcessId(fore_hwnd)
+                app_thread = win32process.GetCurrentThreadId()
+
+                if fore_thread != app_thread:
+                    ctypes.windll.user32.AttachThreadInput(fore_thread, app_thread, True)
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    ctypes.windll.user32.SetFocus(hwnd)
+                    ctypes.windll.user32.AttachThreadInput(fore_thread, app_thread, False)
+                else:
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    ctypes.windll.user32.SetFocus(hwnd)
+
+                time.sleep(0.15)
+                return win32gui.GetForegroundWindow() == hwnd
+            except Exception:
+                pass
+
+        try:
+            win.activate()
+            time.sleep(0.15)
             return True
         except Exception:
-            try:
-                win.activate()
-                return True
-            except Exception:
-                return False
+            return False
 
     def select_poke_tool(self):
         """Activates the Poke Tool by clicking its standard toolbar icon."""
@@ -194,81 +385,80 @@ class LogisimDriver:
     def open_circuit_direct(self, filepath: str) -> bool:
         """
         Directly launches or updates Logisim with the circuit file.
-        Completely eliminates Ctrl+O, file dialogs, and clipboard pasting.
+        Completely eliminates Ctrl+O, file dialogs, and keyboard hijacking.
         """
         abs_path = os.path.abspath(filepath)
         if not os.path.exists(abs_path):
             return False
 
-        # Collect any existing Logisim windows to close after launching the new circuit
+        # Snapshot existing Logisim windows to close previous empty Untitled windows
         old_windows = [
             w for w in gw.getAllWindows()
             if "logisim" in w.title.lower() and "ai logisim controller" not in w.title.lower()
         ]
 
-        # Locate Logisim executable
-        possible_exes = [
-            r"f:\original final downloads\logisim-win-2.7.1 (1).exe",
-            r"f:\original final downloads\logisim-win-2.7.1.exe",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "logisim-win-2.7.1 (1).exe")),
-            os.path.expanduser(r"~\Downloads\logisim-win-2.7.1 (1).exe"),
-        ]
-        exe_path = next((p for p in possible_exes if os.path.exists(p)), None)
-
+        exe_path = self.find_logisim_exe()
         if exe_path:
-            import subprocess
-            try:
-                # Launch Logisim directly with circuit argument and -nosplash to bypass splash screen deadlock
-                subprocess.Popen(["javaw", "-jar", exe_path, "-nosplash", abs_path])
+            spawned = self._spawn_logisim(exe_path, circuit_path=abs_path)
+            if spawned:
                 time.sleep(0.8)
 
-                # Close previous Logisim windows to prevent window and JVM stacking
+                # Close previous empty/untitled Logisim windows to prevent window clutter,
+                # but preserve any existing user-named projects
                 for ow in old_windows:
-                    try:
-                        if HAS_WIN32:
-                            win32gui.PostMessage(ow._hWnd, win32con.WM_CLOSE, 0, 0)
-                        else:
-                            ow.close()
-                    except Exception:
-                        pass
+                    if "untitled" in ow.title.lower():
+                        try:
+                            if HAS_WIN32:
+                                win32gui.PostMessage(ow._hWnd, win32con.WM_CLOSE, 0, 0)
+                            else:
+                                ow.close()
+                        except Exception:
+                            pass
 
-                time.sleep(0.4)
+                time.sleep(0.3)
                 self.focus()
                 return True
-            except Exception:
-                pass
 
-        # Fallback to shortcut paste if direct spawn fails
+        # Fallback to shortcut paste only if Logisim is confirmed running and focused
         return self.open_file(abs_path)
 
     def open_file(self, filepath: str) -> bool:
         """
-        Opens a .circ file in Logisim using Ctrl+O and clipboard paste.
-        Automatically closes previous empty 'Untitled' windows so only the active circuit remains.
+        Fallback: Opens a .circ file in Logisim using Ctrl+O and clipboard paste.
+        STRICTLY VERIFIES that Logisim is the confirmed active foreground window before sending any keystrokes.
+        NEVER sends keystrokes if the foreground window is a browser or another app.
         """
         abs_path = os.path.abspath(filepath)
         if not os.path.exists(abs_path):
             return False
 
         old_win = self.find_window()
-        is_untitled = old_win and "untitled" in old_win.title.lower()
+        if not old_win:
+            return False
 
         if not self.focus():
             return False
+
+        # SAFETY CHECK: Only proceed if Logisim is truly the foreground window
+        if HAS_WIN32:
+            fore_hwnd = win32gui.GetForegroundWindow()
+            if fore_hwnd != old_win._hWnd:
+                # Foreground lock prevented focus; do NOT send Ctrl+O into the user's browser!
+                return False
+
+        is_untitled = "untitled" in old_win.title.lower()
 
         try:
             import pyperclip
             pyperclip.copy(abs_path)
             time.sleep(0.1)
             pyautogui.hotkey("ctrl", "o")
-            # Allow Java JFileChooser dialog to open and focus the filename text field
             time.sleep(0.8)
             pyautogui.hotkey("ctrl", "v")
             time.sleep(0.2)
             pyautogui.press("enter")
             time.sleep(0.7)
 
-            # If old window was empty 'Untitled', close it cleanly with Ctrl+W
             if is_untitled and old_win:
                 try:
                     if HAS_WIN32:
@@ -281,7 +471,6 @@ class LogisimDriver:
                 except Exception:
                     pass
 
-            # Refocus the newly opened circuit window
             self.focus()
             return True
         except Exception:
@@ -299,7 +488,6 @@ class LogisimDriver:
         self.focus()
         try:
             bbox = (win.left, win.top, win.width, win.height)
-            # Ensure bbox has positive dimensions
             if win.width <= 0 or win.height <= 0:
                 return None
 

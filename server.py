@@ -48,6 +48,7 @@ def load_config() -> Dict[str, Any]:
         "groq_api_key": "",
         "groq_model": "qwen/qwen3.8-27b",
         "custom_model": "",
+        "logisim_path": "",
         "thinking_budget": 1024,
         "canvas_offset_x": 200,
         "canvas_offset_y": 70,
@@ -85,6 +86,7 @@ active_groq_model = config.get("custom_model") if config.get("groq_model") == "c
 driver = LogisimDriver(
     canvas_offset_x=config.get("canvas_offset_x", 200),
     canvas_offset_y=config.get("canvas_offset_y", 70),
+    custom_logisim_path=config.get("logisim_path"),
 )
 
 gemini = GeminiClient(
@@ -118,6 +120,7 @@ class SettingsPayload(BaseModel):
     groq_api_key: Optional[str] = None
     groq_model: Optional[str] = None
     custom_model: Optional[str] = None
+    logisim_path: Optional[str] = None
     thinking_budget: Optional[int] = None
     canvas_offset_x: Optional[int] = None
     canvas_offset_y: Optional[int] = None
@@ -145,8 +148,12 @@ def get_status():
     win_info = driver.get_window_info()
     provider = config.get("ai_provider", "gemini").lower()
     active_client = groq if provider == "groq" else gemini
+    exe_path = driver.find_logisim_exe()
     return {
         "logisim": win_info,
+        "logisim_path": exe_path,
+        "has_logisim": bool(exe_path),
+        "bundled_logisim": driver.is_bundled(),
         "ai_provider": provider,
         "has_api_key": bool(active_client.api_key),
         "model_id": active_client.model_id,
@@ -177,6 +184,9 @@ def get_settings():
         "groq_api_key": masked_groq_key,
         "groq_model": config.get("groq_model", "qwen/qwen3.8-27b"),
         "custom_model": config.get("custom_model", ""),
+        "logisim_path": config.get("logisim_path", ""),
+        "detected_logisim_path": driver.find_logisim_exe(),
+        "bundled_logisim": driver.is_bundled(),
         "thinking_budget": config.get("thinking_budget", 1024),
         "canvas_offset_x": driver.canvas_offset_x,
         "canvas_offset_y": driver.canvas_offset_y,
@@ -201,6 +211,9 @@ def update_settings(payload: SettingsPayload):
         config["groq_model"] = payload.groq_model.strip()
     if payload.custom_model is not None:
         config["custom_model"] = payload.custom_model.strip()
+    if payload.logisim_path is not None:
+        config["logisim_path"] = payload.logisim_path.strip()
+        driver.custom_logisim_path = config["logisim_path"] if config["logisim_path"] else None
     if payload.thinking_budget is not None:
         config["thinking_budget"] = payload.thinking_budget
     if payload.canvas_offset_x is not None:
@@ -263,7 +276,12 @@ def chat(payload: ChatPayload):
 @app.post("/api/control/launch-logisim")
 def launch_logisim_app():
     ok = driver.launch_logisim()
-    return {"success": ok, "message": "Logisim 2.7.1 launched!" if ok else "Logisim file not found in Downloads."}
+    if ok:
+        return {"success": True, "message": "Logisim 2.7.1 launched successfully!"}
+    exe = driver.find_logisim_exe()
+    if not exe:
+        return {"success": False, "message": "Logisim executable not found. Please install Java and check Settings."}
+    return {"success": False, "message": "Failed to start Logisim process. Please ensure Java (JRE/JDK) is installed."}
 
 
 @app.post("/api/control/tick")
@@ -300,7 +318,8 @@ def manual_poke(payload: PokePayload):
 def reload_circuit():
     if os.path.exists(agent.current_circ_path):
         ok = driver.open_circuit_direct(agent.current_circ_path)
-        return {"success": ok, "message": "Loaded circuit into Logisim!" if ok else "Could not launch Logisim."}
+        return {"success": ok, "message": "Loaded circuit into Logisim!" if ok else "Could not launch Logisim or load circuit."}
+    return {"success": False, "message": "No generated circuit exists yet."}
     return {"success": False, "message": "No generated circuit exists yet."}
 
 
