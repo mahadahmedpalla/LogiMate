@@ -1,5 +1,5 @@
 """
-Build script to compile LogiMate into a single-file Windows Installer (LogiMate-Setup-v1.3.0.exe).
+Build script to compile LogiMate into a single-file Windows Installer (LogiMate-Setup-v1.4.0.exe).
 Run: python build_installer.py
 """
 
@@ -35,7 +35,7 @@ def build_installer():
     print(f"Compiling Windows Installer using {iss_file}...")
     subprocess.check_call([iscc, iss_file])
 
-    output_exe = os.path.abspath(os.path.join("dist_installer", "LogiMate-Setup-v1.3.0.exe"))
+    output_exe = os.path.abspath(os.path.join("dist_installer", "LogiMate-Setup-v1.4.0.exe"))
     print("\n" + "=" * 65)
     print("  SUCCESS: Single-File Setup Installer Created!")
     print(f"  Location: {output_exe}")

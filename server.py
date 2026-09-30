@@ -140,7 +140,7 @@ class OpenUrlPayload(BaseModel):
     url: Optional[str] = None
 
 
-CURRENT_VERSION = "1.3.0"
+CURRENT_VERSION = "1.4.0"
 
 
 @app.get("/api/status")
