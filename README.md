@@ -24,21 +24,17 @@ This will start the local server and automatically open the dashboard in your de
 
 ### 2. Configure Your Gemini Credentials
 1. Click **Settings** (top right of the dashboard).
-2. Enter your Google Gemini API key or Bearer token (supports `AIza...` and `AQ.Ab8RN6IY...`).
-3. Select your desired model:
-   - **Gemini 3.8 Flash**
-   - **Gemini 3.7 Flash**
-   - **Gemini 3.6 Flash**
-   - **Gemini 2.5 Flash**
-   - **Gemini 2.0 Flash**
-   - **Custom Model** (type any identifier)
+2. Enter your Google Gemini API key or Groq API key (`gsk_...`).
+3. Select your desired provider and model:
+   - **Google Gemini**: Gemini 3.6 Flash, 3.5 Flash, 3.1 Flash Lite, 3.8 Flash, 3.7 Flash, Custom
+   - **Groq LPU**: Qwen 3.8 27B, Llama 3.3 70B, DeepSeek R1 Distill 70B, Llama 3.1 8B Instant, Custom
 4. Click **Test API Connection** to verify, then **Save Changes**.
 
 ---
 
 ## 📦 Download & Install (For End Users)
 
-1. Download the latest setup installer (`LogiMate-Setup-v1.0.0.exe`) from the [Releases Page](https://github.com/mahadahmedpalla/LogiMate/releases/latest).
+1. Download the latest setup installer (`LogiMate-Setup-v1.3.0.exe`) from the [Releases Page](https://github.com/mahadahmedpalla/LogiMate/releases/latest).
 2. Double-click the installer to install LogiMate with desktop shortcuts and automatic Logisim detection.
 
 ### 🛡️ Note on Windows SmartScreen ("Windows protected your PC")
@@ -66,7 +62,7 @@ python build_exe.py
 # 2. Compile single-file Windows setup installer:
 python build_installer.py
 ```
-The compiled setup wizard will be created in `dist_installer/LogiMate-Setup-v1.0.0.exe`.
+The compiled setup wizard will be created in `dist_installer/LogiMate-Setup-v1.3.0.exe`.
 
 ---
 
