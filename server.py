@@ -128,6 +128,7 @@ class SettingsPayload(BaseModel):
 
 class ChatPayload(BaseModel):
     prompt: str
+    deep_mode: Optional[bool] = False
 
 
 class PokePayload(BaseModel):
@@ -140,7 +141,21 @@ class OpenUrlPayload(BaseModel):
     url: Optional[str] = None
 
 
-CURRENT_VERSION = "1.4.0"
+CURRENT_VERSION = "1.5.0"
+
+
+@app.get("/api/ping")
+def ping():
+    """Zero-cost readiness probe used by the desktop launcher (no window/file scans)."""
+    return {"ok": True, "version": CURRENT_VERSION}
+
+
+def _circuit_version() -> int:
+    """Modification stamp of the active circuit file; changes only when a new circuit is written."""
+    try:
+        return os.stat(agent.current_circ_path).st_mtime_ns
+    except OSError:
+        return 0
 
 
 @app.get("/api/status")
@@ -161,6 +176,7 @@ def get_status():
         "available_gemini_models": AVAILABLE_GEMINI_MODELS,
         "available_groq_models": AVAILABLE_GROQ_MODELS,
         "active_circuit": os.path.exists(agent.current_circ_path),
+        "circuit_version": _circuit_version(),
         "active_pins": agent.active_pin_map,
     }
 
@@ -269,7 +285,7 @@ def test_key(payload: SettingsPayload):
 def chat(payload: ChatPayload):
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
-    result = agent.execute_prompt(payload.prompt)
+    result = agent.execute_prompt(payload.prompt, deep_mode=payload.deep_mode)
     return result
 
 

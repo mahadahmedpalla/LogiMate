@@ -204,3 +204,37 @@ CRITICAL RULES:
   - Multi-bit data buses (e.g. 8-bit, 16-bit A, B, Sum) and control lines (1-bit Carry/Clock/Reset or 2-bit OpCode/Select) must NEVER share coordinate lines or vertical routing trunks.
   - Route control lines on separate coordinate columns outside data trunks, or use Tunnels (e.g. {"type": "Tunnel", "loc": [x, y], "label": "T1", "width": width}) to route buses cleanly across the canvas without wire crossing conflicts!
 """
+
+
+# ---------------------------------------------------------------------------
+# Deep Mode add-ons (appended to SYSTEM_PROMPT only when Deep Mode is active).
+# Standard Mode keeps using SYSTEM_PROMPT exactly as above.
+# ---------------------------------------------------------------------------
+
+DEEP_MODE_ADDENDUM = """
+
+DEEP MODE IS ACTIVE (engineering-grade accuracy):
+- After you answer, an automatic electrical verifier checks your circuit for floating inputs,
+  undriven outputs, short circuits (two outputs on one net), bit-width conflicts and wire ends that touch nothing.
+  If it finds errors you will get ONE chance to fix them, so get it right the first time.
+- Before writing JSON, plan in "thought": list every block, its exact loc, every terminal coordinate you will use
+  (computed from the terminal rules above), and the bit width of every signal.
+- Every wire endpoint must land EXACTLY on a terminal coordinate or on another wire of the same signal.
+  Re-check each wire against your terminal list. Never leave a required input unconnected.
+- Each net must have exactly ONE driver. Different signals must never touch, cross at an endpoint, or share a trunk.
+- If a CURRENT CIRCUIT block is provided and the user asks for a change, start from that circuit,
+  apply the change, and output the COMPLETE updated build_custom_circuit action (not just the difference).
+"""
+
+
+DEEP_REPAIR_TEMPLATE = """The automatic electrical verifier found problems in the circuit you just produced.
+
+VERIFIER REPORT:
+{feedback}
+
+YOUR PREVIOUS build action (JSON):
+{previous_action}
+
+Fix EVERY reported problem. Keep everything that already works unchanged.
+Respond with the same JSON format (thought, response, actions) containing the COMPLETE corrected
+build action. Do not omit any pins, components or wires that should remain."""

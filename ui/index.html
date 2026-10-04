@@ -21,7 +21,7 @@
         </div>
         <div class="brand-text">
           <h1 class="brand-title">AI Logisim Controller</h1>
-          <span class="badge version-badge">v1.4 • 2.7.1 Engine</span>
+          <span class="badge version-badge">v1.5 • 2.7.1 Engine</span>
         </div>
       </div>
 
@@ -132,6 +132,10 @@
             <div class="input-bottom-bar">
               <div class="input-meta-info">
                 <span class="active-model-pill" id="active-model-pill">Gemini 3.8 Flash</span>
+                <label class="deep-mode-toggle" title="Enable Engineering-Grade Validation & Auto-Repair" style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="checkbox" id="deep-mode-checkbox">
+                  <span class="deep-mode-label" style="font-size: 0.75rem; color: #38bdf8; font-weight: 600;">Deep Mode</span>
+                </label>
                 <span class="keyboard-hint">Press <kbd>Ctrl+Enter</kbd> to submit</span>
               </div>
               <button type="submit" class="submit-btn" id="send-btn">
@@ -439,7 +443,7 @@
       <div class="modal-body" style="padding: 16px 22px;">
         <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
           <span id="update-tag-badge" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #818cf8; font-weight: 600; font-size: 0.82rem; padding: 4px 10px; border-radius: 6px;">New Version Available</span>
-          <span style="font-size: 0.82rem; color: #94a3b8;">Installed: v<span id="current-installed-ver">1.4.0</span></span>
+          <span style="font-size: 0.82rem; color: #94a3b8;">Installed: v<span id="current-installed-ver">1.5.0</span></span>
         </div>
         <p style="font-size: 0.9rem; line-height: 1.5; color: #e2e8f0; margin-bottom: 12px;">
           A new version of <strong>LogiMate</strong> is available on GitHub with 100% accurate circuit routing, Priority Encoder support, and stability fixes.

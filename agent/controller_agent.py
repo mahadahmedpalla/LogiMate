@@ -10,8 +10,9 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from logisim_engine.circ_builder import CircuitBuilder
 from logisim_engine.driver import LogisimDriver
+from logisim_engine.verifier import verify_circuit
 from .gemini_client import GeminiClient
-from .circuit_prompts import SYSTEM_PROMPT
+from .circuit_prompts import SYSTEM_PROMPT, DEEP_MODE_ADDENDUM, DEEP_REPAIR_TEMPLATE
 from .circuit_templates import (
     build_half_adder,
     build_full_adder,
@@ -228,173 +229,209 @@ class ControllerAgent:
         self.active_pin_map: Dict[str, tuple] = {}
         self.conversation_history: List[Dict[str, str]] = []
 
-    def execute_prompt(self, user_prompt: str) -> Dict[str, Any]:
+    def execute_prompt(self, user_prompt: str, deep_mode: bool = False) -> Dict[str, Any]:
         """
         Processes a user request through configured LLM and executes corresponding actions.
         Returns detailed execution report.
         """
         self.conversation_history.append({"role": "user", "content": user_prompt})
 
-        # Call configured LLM client
-        result = self.client.generate_chat_response(
-            messages=self.conversation_history,
-            system_instruction=SYSTEM_PROMPT,
-        )
+        sys_prompt = SYSTEM_PROMPT
+        if deep_mode:
+            sys_prompt += DEEP_MODE_ADDENDUM
 
-        if not result.get("success"):
-            return {
-                "success": False,
-                "error": result.get("error", "Failed to generate AI response."),
-                "thought": "",
-                "response": result.get("error") or "Could not contact AI model. Please verify your API key and model in Settings.",
-                "executed_actions": [],
-            }
-
-        response_data = result.get("data", {})
-        thought = response_data.get("thought", "")
-        reply_text = response_data.get("response", result.get("raw_text", ""))
-        actions = response_data.get("actions", [])
-
-        # Store model reply in history
-        self.conversation_history.append({"role": "model", "content": reply_text})
-
-        # Execute actions sequentially
-        executed_actions = []
+        max_tries = 2 if deep_mode else 1
+        
+        final_thought = ""
+        final_reply = ""
+        final_actions = []
         screenshot_b64 = None
 
-        for act in actions:
-            action_type = act.get("action")
-            action_status = {"action": action_type, "status": "pending", "details": ""}
+        for attempt in range(max_tries):
+            # Call configured LLM client
+            result = self.client.generate_chat_response(
+                messages=self.conversation_history,
+                system_instruction=sys_prompt,
+            )
 
-            try:
-                if action_type == "build_template":
-                    tmpl = act.get("template", "").lower()
-                    builder = CircuitBuilder(circuit_name="main")
-
-                    if tmpl == "half_adder":
-                        meta = build_half_adder(builder)
-                    elif tmpl == "full_adder":
-                        meta = build_full_adder(builder)
-                    elif tmpl == "mux_2to1":
-                        meta = build_mux_2to1(builder)
-                    elif tmpl == "sr_latch":
-                        meta = build_sr_latch(builder)
-                    else:
-                        raise ValueError(f"Unknown template: {tmpl}")
-
-                    builder.save_file(self.current_circ_path)
-                    self.current_builder = builder
-                    self.active_pin_map = builder.pin_map.copy()
-                    action_status["status"] = "success"
-                    action_status["details"] = f"Generated {tmpl} at {os.path.basename(self.current_circ_path)} with pins {list(self.active_pin_map.keys())}"
-
-                elif action_type == "build_custom_circuit":
-                    circ_name = act.get("circuit_name", "main")
-                    builder = CircuitBuilder(circuit_name=circ_name)
-
-                    # 1. Add pins (supports width 1..32, input/output, facing)
-                    for p in act.get("pins", []):
-                        p_name, px, py, is_out, width, facing = _parse_pin(p)
-                        builder.add_pin(
-                            name=p_name,
-                            x=px,
-                            y=py,
-                            is_output=is_out,
-                            width=width,
-                            facing=facing,
-                        )
-
-                    # 2. Add splitters (if explicitly declared in splitters array)
-                    for s in act.get("splitters", []):
-                        _add_circuit_element(builder, s, default_type="splitter")
-
-                    # 3. Add gates & components (safely dispatched to correct Logisim libraries)
-                    for g in act.get("gates", []):
-                        _add_circuit_element(builder, g, default_type="AND")
-
-                    for c in act.get("components", []):
-                        _add_circuit_element(builder, c, default_type=None)
-
-                    # 4. Add wires
-                    for w in act.get("wires", []):
-                        p1, p2 = _parse_wire(w)
-                        builder.add_wire(p1, p2)
-
-                    builder.save_file(self.current_circ_path)
-                    self.current_builder = builder
-                    self.active_pin_map = builder.pin_map.copy()
-                    action_status["status"] = "success"
-                    action_status["details"] = f"Custom circuit created with {len(builder.components)} components and {len(builder.wires)} wires."
-
-                elif action_type == "open_in_logisim":
-                    if os.path.exists(self.current_circ_path):
-                        ok = self.driver.open_circuit_direct(self.current_circ_path)
-                        action_status["status"] = "success" if ok else "warning"
-                        action_status["details"] = (
-                            f"Loaded {os.path.basename(self.current_circ_path)} directly into Logisim."
-                            if ok
-                            else "Circuit file ready. Click 'Load in Logisim' to view."
-                        )
-                    else:
-                        action_status["status"] = "error"
-                        action_status["details"] = "No circuit file exists to load."
-
-                elif action_type == "poke_pin":
-                    pin_name = act.get("pin")
-                    if pin_name in self.active_pin_map:
-                        coords = self.active_pin_map[pin_name]
-                        ok = self.driver.poke_canvas_coord(coords[0], coords[1])
-                        action_status["status"] = "success" if ok else "warning"
-                        action_status["details"] = f"Poked pin '{pin_name}' at canvas ({coords[0]}, {coords[1]})."
-                    else:
-                        action_status["status"] = "warning"
-                        action_status["details"] = f"Pin '{pin_name}' not found in active pin map {list(self.active_pin_map.keys())}."
-
-                elif action_type == "tick_clock":
-                    count = int(act.get("count", 1))
-                    for _ in range(count):
-                        self.driver.tick_once()
-                        time.sleep(0.05)
-                    action_status["status"] = "success"
-                    action_status["details"] = f"Stepped clock {count} time(s)."
-
-                elif action_type == "toggle_clock":
-                    self.driver.toggle_ticks()
-                    action_status["status"] = "success"
-                    action_status["details"] = "Toggled continuous clock."
-
-                elif action_type == "reset_simulation":
-                    self.driver.reset_simulation()
-                    action_status["status"] = "success"
-                    action_status["details"] = "Simulation state reset."
-
-                elif action_type == "inspect_state":
-                    screenshot_b64 = self.driver.capture_screenshot_base64()
-                    action_status["status"] = "success" if screenshot_b64 else "warning"
-                    action_status["details"] = "Captured window snapshot." if screenshot_b64 else "Could not capture Logisim window."
-
+            if not result.get("success"):
+                if attempt == 0:
+                    return {
+                        "success": False,
+                        "error": result.get("error", "Failed to generate AI response."),
+                        "thought": "",
+                        "response": result.get("error") or "Could not contact AI model. Please verify your API key and model in Settings.",
+                        "executed_actions": [],
+                    }
                 else:
-                    action_status["status"] = "ignored"
-                    action_status["details"] = f"Unrecognized action: {action_type}"
+                    break
 
-            except Exception as e:
-                action_status["status"] = "error"
-                action_status["details"] = str(e)
+            response_data = result.get("data", {})
+            thought = response_data.get("thought", "")
+            reply_text = response_data.get("response", result.get("raw_text", ""))
+            actions = response_data.get("actions", [])
 
-            executed_actions.append(action_status)
+            # Store model reply in history
+            self.conversation_history.append({"role": "model", "content": reply_text})
+
+            final_thought = thought
+            final_reply = reply_text
+            executed_actions = []
+            screenshot_b64 = None
+            build_action_json = None
+            circuit_built = False
+
+            for act in actions:
+                action_type = act.get("action")
+                action_status = {"action": action_type, "status": "pending", "details": ""}
+
+                try:
+                    if action_type == "build_template":
+                        tmpl = act.get("template", "").lower()
+                        builder = CircuitBuilder(circuit_name="main")
+
+                        if tmpl == "half_adder":
+                            meta = build_half_adder(builder)
+                        elif tmpl == "full_adder":
+                            meta = build_full_adder(builder)
+                        elif tmpl == "mux_2to1":
+                            meta = build_mux_2to1(builder)
+                        elif tmpl == "sr_latch":
+                            meta = build_sr_latch(builder)
+                        else:
+                            raise ValueError(f"Unknown template: {tmpl}")
+
+                        builder.save_file(self.current_circ_path)
+                        self.current_builder = builder
+                        self.active_pin_map = builder.pin_map.copy()
+                        action_status["status"] = "success"
+                        action_status["details"] = f"Generated {tmpl} at {os.path.basename(self.current_circ_path)} with pins {list(self.active_pin_map.keys())}"
+                        build_action_json = act
+                        circuit_built = True
+
+                    elif action_type == "build_custom_circuit":
+                        circ_name = act.get("circuit_name", "main")
+                        builder = CircuitBuilder(circuit_name=circ_name)
+
+                        # 1. Add pins (supports width 1..32, input/output, facing)
+                        for p in act.get("pins", []):
+                            p_name, px, py, is_out, width, facing = _parse_pin(p)
+                            builder.add_pin(
+                                name=p_name,
+                                x=px,
+                                y=py,
+                                is_output=is_out,
+                                width=width,
+                                facing=facing,
+                            )
+
+                        # 2. Add splitters (if explicitly declared in splitters array)
+                        for s in act.get("splitters", []):
+                            _add_circuit_element(builder, s, default_type="splitter")
+
+                        # 3. Add gates & components (safely dispatched to correct Logisim libraries)
+                        for g in act.get("gates", []):
+                            _add_circuit_element(builder, g, default_type="AND")
+
+                        for c in act.get("components", []):
+                            _add_circuit_element(builder, c, default_type=None)
+
+                        # 4. Add wires
+                        for w in act.get("wires", []):
+                            p1, p2 = _parse_wire(w)
+                            builder.add_wire(p1, p2)
+
+                        builder.save_file(self.current_circ_path)
+                        self.current_builder = builder
+                        self.active_pin_map = builder.pin_map.copy()
+                        action_status["status"] = "success"
+                        action_status["details"] = f"Custom circuit created with {len(builder.components)} components and {len(builder.wires)} wires."
+                        build_action_json = act
+                        circuit_built = True
+
+                    elif action_type == "open_in_logisim":
+                        if os.path.exists(self.current_circ_path):
+                            ok = self.driver.open_circuit_direct(self.current_circ_path)
+                            action_status["status"] = "success" if ok else "warning"
+                            action_status["details"] = (
+                                f"Loaded {os.path.basename(self.current_circ_path)} directly into Logisim."
+                                if ok
+                                else "Circuit file ready. Click 'Load in Logisim' to view."
+                            )
+                        else:
+                            action_status["status"] = "error"
+                            action_status["details"] = "No circuit file exists to load."
+
+                    elif action_type == "poke_pin":
+                        pin_name = act.get("pin")
+                        if pin_name in self.active_pin_map:
+                            coords = self.active_pin_map[pin_name]
+                            ok = self.driver.poke_canvas_coord(coords[0], coords[1])
+                            action_status["status"] = "success" if ok else "warning"
+                            action_status["details"] = f"Poked pin '{pin_name}' at canvas ({coords[0]}, {coords[1]})."
+                        else:
+                            action_status["status"] = "warning"
+                            action_status["details"] = f"Pin '{pin_name}' not found in active pin map {list(self.active_pin_map.keys())}."
+
+                    elif action_type == "tick_clock":
+                        count = int(act.get("count", 1))
+                        for _ in range(count):
+                            self.driver.tick_once()
+                            time.sleep(0.05)
+                        action_status["status"] = "success"
+                        action_status["details"] = f"Stepped clock {count} time(s)."
+
+                    elif action_type == "toggle_clock":
+                        self.driver.toggle_ticks()
+                        action_status["status"] = "success"
+                        action_status["details"] = "Toggled continuous clock."
+
+                    elif action_type == "reset_simulation":
+                        self.driver.reset_simulation()
+                        action_status["status"] = "success"
+                        action_status["details"] = "Simulation state reset."
+
+                    elif action_type == "inspect_state":
+                        screenshot_b64 = self.driver.capture_screenshot_base64()
+                        action_status["status"] = "success" if screenshot_b64 else "warning"
+                        action_status["details"] = "Captured window snapshot." if screenshot_b64 else "Could not capture Logisim window."
+
+                    else:
+                        action_status["status"] = "ignored"
+                        action_status["details"] = f"Unrecognized action: {action_type}"
+
+                except Exception as e:
+                    action_status["status"] = "error"
+                    action_status["details"] = str(e)
+
+                executed_actions.append(action_status)
+
+            final_actions = executed_actions
+
+            if deep_mode and circuit_built and build_action_json and self.current_builder:
+                report = verify_circuit(self.current_builder)
+                if not report.ok and attempt < max_tries - 1:
+                    repair_prompt = DEEP_REPAIR_TEMPLATE.format(
+                        feedback=report.as_feedback(),
+                        previous_action=json.dumps(build_action_json, indent=2)
+                    )
+                    self.conversation_history.append({"role": "user", "content": repair_prompt})
+                    continue # Retry loop
+
+            break # No retry needed
 
         # Guaranteed Auto-Open:
         # If a circuit was successfully built (custom or template), ensure it is opened in Logisim,
         # even if Gemini omitted "open_in_logisim" from the actions array.
-        circuit_built = any(
+        circuit_built_in_actions = any(
             a.get("action") in ("build_custom_circuit", "build_template") and a.get("status") == "success"
-            for a in executed_actions
+            for a in final_actions
         )
-        already_opened = any(a.get("action") == "open_in_logisim" for a in executed_actions)
+        already_opened = any(a.get("action") == "open_in_logisim" for a in final_actions)
 
-        if circuit_built and not already_opened and os.path.exists(self.current_circ_path):
+        if circuit_built_in_actions and not already_opened and os.path.exists(self.current_circ_path):
             ok = self.driver.open_circuit_direct(self.current_circ_path)
-            executed_actions.append({
+            final_actions.append({
                 "action": "open_in_logisim",
                 "status": "success" if ok else "warning",
                 "details": (
@@ -406,9 +443,9 @@ class ControllerAgent:
 
         return {
             "success": True,
-            "thought": thought,
-            "response": reply_text,
-            "executed_actions": executed_actions,
+            "thought": final_thought,
+            "response": final_reply,
+            "executed_actions": final_actions,
             "screenshot": screenshot_b64,
             "pin_map": self.active_pin_map,
             "circuit_file": self.current_circ_path if os.path.exists(self.current_circ_path) else None,

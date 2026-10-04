@@ -82,7 +82,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Status Polling & Updates
   // ----------------------------------------------------
 
+  let statusPollInFlight = false;
+  let lastCircuitVersion = null;
+
   async function updateStatus() {
+    // Never stack requests if the previous poll is still running (slow PCs)
+    if (statusPollInFlight) return;
+    statusPollInFlight = true;
     try {
       const res = await fetch("/api/status");
       if (!res.ok) return;
@@ -121,11 +127,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.active_circuit) {
         circuitPresencePill.textContent = "Loaded (circuit.circ)";
         circuitPresencePill.className = "status-pill-small ready";
-        updateSchematicView();
-        updateXmlView();
+        // Only re-fetch and redraw the canvas/XML when the circuit file actually changed
+        const version = data.circuit_version !== undefined ? data.circuit_version : null;
+        if (version === null || version !== lastCircuitVersion) {
+          lastCircuitVersion = version;
+          updateSchematicView();
+          updateXmlView();
+        }
       } else {
         circuitPresencePill.textContent = "No Circuit";
         circuitPresencePill.className = "status-pill-small";
+        lastCircuitVersion = null;
       }
 
       // Render pins if changed
@@ -135,6 +147,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } catch (err) {
       console.warn("Status poll error:", err);
+    } finally {
+      statusPollInFlight = false;
     }
   }
 
@@ -153,8 +167,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return id;
   }
 
-  // Poll every 3 seconds
-  setInterval(updateStatus, 3000);
+  // Poll every 3 seconds (paused while the window is minimized/hidden to save CPU)
+  setInterval(() => {
+    if (!document.hidden) updateStatus();
+  }, 3000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) updateStatus();
+  });
   updateStatus();
   refreshStatusBtn.addEventListener("click", updateStatus);
 
@@ -290,6 +309,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const prompt = promptInput.value.trim();
     if (!prompt) return;
 
+    const deepModeCheckbox = document.getElementById("deep-mode-checkbox");
+    const isDeepMode = deepModeCheckbox ? deepModeCheckbox.checked : false;
+
     // Append user message
     appendUserMessage(prompt);
     promptInput.value = "";
@@ -302,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, deep_mode: isDeepMode }),
       });
 
       const data = await res.json();
