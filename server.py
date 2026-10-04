@@ -141,7 +141,7 @@ class OpenUrlPayload(BaseModel):
     url: Optional[str] = None
 
 
-CURRENT_VERSION = "1.5.0"
+CURRENT_VERSION = "1.6.0"
 
 
 @app.get("/api/ping")
