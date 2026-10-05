@@ -127,7 +127,7 @@
                   <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
                 </button>
               </div>
-              <div class="px-3 pt-2 pb-1 flex items-center justify-between text-outline font-label-mono text-[11px]">
+              <div class="px-3 pt-2 pb-1 flex items-center justify-between text-outline font-label-mono text-[11px] gap-2">
                 <span class="flex items-center gap-3">
                   <label class="flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors">
                     <input type="checkbox" id="deep-mode-checkbox" class="accent-primary w-3.5 h-3.5">
@@ -135,9 +135,15 @@
                   </label>
                   <span id="active-model-pill" class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant">Gemini</span>
                 </span>
-                <span class="hidden sm:inline-flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[13px]">keyboard_return</span>
-                  <span>Press Return to build automatically</span>
+                <span class="flex items-center gap-2">
+                  <button type="button" id="btn-reset-chat" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high hover:bg-error-container hover:text-on-error-container text-on-surface-variant transition-colors cursor-pointer font-medium text-[11px]" title="Reset chat history and clear AI context">
+                    <span class="material-symbols-outlined text-[13px]">restart_alt</span>
+                    <span>New Chat</span>
+                  </button>
+                  <span class="hidden md:inline-flex items-center gap-1 opacity-80">
+                    <span class="material-symbols-outlined text-[13px]">keyboard_return</span>
+                    <span>Return to build</span>
+                  </span>
                 </span>
               </div>
             </form>
@@ -239,116 +245,134 @@
   </main>
 
   <!-- Modals -->
-  <div class="modal-overlay hidden" id="settings-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-    <div class="modal-card bg-surface-container-lowest rounded-xl shadow-2xl p-6 w-full max-w-lg border border-surface-container-high relative">
-      <button id="close-settings-btn" class="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface cursor-pointer" type="button"><span class="material-symbols-outlined">close</span></button>
-      <h2 class="text-xl font-headline-md font-bold mb-4">Settings & AI Credentials</h2>
-      <form id="settings-form" class="flex flex-col gap-4">
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-semibold">Active AI Provider</label>
-          <select id="cfg-provider-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
-            <option value="gemini">Google Gemini</option>
-            <option value="groq">Groq LPU</option>
-          </select>
+  <!-- Modals -->
+  <div class="modal-overlay hidden" id="settings-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); padding: 1rem;">
+    <div class="modal-card bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-lg border border-surface-container-high relative flex flex-col max-h-[90vh] overflow-hidden">
+      <!-- Pinned Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-surface-container-high flex-shrink-0 bg-surface-container-lowest">
+        <div class="flex items-center gap-2.5">
+          <span class="material-symbols-outlined text-[20px] text-primary">settings</span>
+          <h2 class="text-lg font-headline-md font-bold text-on-surface">Settings & AI Credentials</h2>
         </div>
-        <div id="gemini-settings-group" class="flex flex-col gap-4">
+        <button id="close-settings-btn" class="p-1.5 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors cursor-pointer" type="button">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      <!-- Scrollable Form Container -->
+      <form id="settings-form" onsubmit="return false;" class="flex flex-col flex-grow overflow-hidden">
+        <div class="flex-grow overflow-y-auto px-6 py-4 flex flex-col gap-4">
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Gemini API Key</label>
-            <div class="flex gap-2">
-              <input type="password" id="cfg-api-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="AIza...">
-              <button type="button" id="toggle-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
-                <span class="material-symbols-outlined text-[18px]">visibility</span>
-              </button>
+            <label class="text-sm font-semibold">Active AI Provider</label>
+            <select id="cfg-provider-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface">
+              <option value="gemini">Google Gemini</option>
+              <option value="groq">Groq LPU</option>
+            </select>
+          </div>
+          
+          <div id="gemini-settings-group" class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Gemini API Key</label>
+              <div class="flex gap-2">
+                <input type="password" id="cfg-api-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface" placeholder="AIza...">
+                <button type="button" id="toggle-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
+                  <span class="material-symbols-outlined text-[18px]">visibility</span>
+                </button>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Gemini Model</label>
+              <select id="cfg-model-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface">
+                <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                <option value="custom">Custom Model...</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Reasoning Budget</label>
+              <select id="cfg-thinking-budget" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface">
+                <option value="1024">Balanced (~3-4s)</option>
+                <option value="2048">Deep Reasoning (~5-8s)</option>
+                <option value="0">Instant (~1-2s)</option>
+              </select>
             </div>
           </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Gemini Model</label>
-            <select id="cfg-model-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
-              <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-              <option value="custom">Custom Model...</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Reasoning Budget</label>
-            <select id="cfg-thinking-budget" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
-              <option value="1024">Balanced (~3-4s)</option>
-              <option value="2048">Deep Reasoning (~5-8s)</option>
-              <option value="0">Instant (~1-2s)</option>
-            </select>
-          </div>
-        </div>
-        
-        <div id="groq-settings-group" class="flex flex-col gap-4 hidden">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Groq API Key</label>
-            <div class="flex gap-2">
-              <input type="password" id="cfg-groq-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="gsk_...">
-              <button type="button" id="toggle-groq-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
-                <span class="material-symbols-outlined text-[18px]">visibility</span>
-              </button>
+          
+          <div id="groq-settings-group" class="flex flex-col gap-4 hidden">
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Groq API Key</label>
+              <div class="flex gap-2">
+                <input type="password" id="cfg-groq-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface" placeholder="gsk_...">
+                <button type="button" id="toggle-groq-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
+                  <span class="material-symbols-outlined text-[18px]">visibility</span>
+                </button>
+              </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Groq Model</label>
+              <select id="cfg-groq-model-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface">
+                <option value="qwen/qwen3.8-27b">Qwen 3.8 27B</option>
+                <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                <option value="custom">Custom Model...</option>
+              </select>
             </div>
           </div>
+
+          <div id="custom-model-group" class="flex flex-col gap-1 hidden">
+            <label class="text-sm font-semibold">Custom Model ID</label>
+            <input type="text" id="cfg-custom-model" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface">
+          </div>
+
+          <div class="flex items-center gap-3 mt-1">
+            <button type="button" id="btn-test-connection" class="px-4 py-2 rounded-lg text-on-surface bg-surface-container hover:bg-surface-container-high border border-surface-container-high text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
+              <span class="material-symbols-outlined text-[16px] text-primary">network_check</span>
+              <span>Test API Connection</span>
+            </button>
+            <span id="test-result-badge" class="hidden px-2.5 py-1 text-[11px] font-semibold rounded-full uppercase"></span>
+          </div>
+
+          <hr class="border-surface-container-high my-1">
+
           <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Groq Model</label>
-            <select id="cfg-groq-model-select" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
-              <option value="qwen/qwen3.8-27b">Qwen 3.8 27B</option>
-              <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-              <option value="custom">Custom Model...</option>
-            </select>
+            <label class="text-sm font-semibold">Logisim Path</label>
+            <input type="text" id="cfg-logisim-path" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface" placeholder="Auto-detected">
+            <small class="text-[11px] text-outline" id="cfg-logisim-status-hint">Auto-discovers bundled Logisim, Downloads, Desktop, and Program Files.</small>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Offset X</label>
+              <input type="number" id="cfg-offset-x" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface" value="200">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-sm font-semibold">Offset Y</label>
+              <input type="number" id="cfg-offset-y" class="p-2 rounded border border-surface-container-high bg-surface-container-low text-on-surface" value="70">
+            </div>
           </div>
         </div>
 
-        <div id="custom-model-group" class="flex flex-col gap-1 hidden">
-          <label class="text-sm font-semibold">Custom Model ID</label>
-          <input type="text" id="cfg-custom-model" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
-        </div>
-
-        <div class="flex items-center gap-3 mt-2">
-          <button type="button" id="btn-test-connection" class="px-4 py-2 rounded-lg text-on-surface bg-surface-container hover:bg-surface-container-high border border-surface-container-high text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
-            <span class="material-symbols-outlined text-[16px] text-primary">network_check</span>
-            <span>Test API Connection</span>
+        <!-- Pinned Footer (Always visible regardless of screen height) -->
+        <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-surface-container-high flex-shrink-0 bg-surface-container-lowest shadow-sm">
+          <button type="button" id="cancel-settings-btn" class="px-4 py-2 rounded-xl text-on-surface hover:bg-surface-container transition-colors font-medium text-sm cursor-pointer">Cancel</button>
+          <button type="button" id="save-settings-btn" class="px-5 py-2 rounded-xl bg-primary hover:bg-primary-container hover:text-on-primary-container transition-all text-on-primary font-medium text-sm shadow-sm cursor-pointer flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[16px]">save</span>
+            <span>Save Changes</span>
           </button>
-          <span id="test-result-badge" class="hidden px-2.5 py-1 text-[11px] font-semibold rounded-full uppercase"></span>
-        </div>
-
-        <hr class="border-surface-container-high">
-
-        
-        <div class="flex flex-col gap-1">
-          <label class="text-sm font-semibold">Logisim Path</label>
-          <input type="text" id="cfg-logisim-path" class="p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="Auto-detected">
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Offset X</label>
-            <input type="number" id="cfg-offset-x" class="p-2 rounded border border-surface-container-high bg-surface-container-low" value="200">
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-sm font-semibold">Offset Y</label>
-            <input type="number" id="cfg-offset-y" class="p-2 rounded border border-surface-container-high bg-surface-container-low" value="70">
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-3 mt-4">
-          <button type="button" id="cancel-settings-btn" class="px-4 py-2 rounded text-on-surface hover:bg-surface-container">Cancel</button>
-          <button type="submit" id="save-settings-btn" class="px-4 py-2 rounded bg-primary text-on-primary">Save Changes</button>
         </div>
       </form>
     </div>
   </div>
 
-  <div class="modal-overlay hidden" id="update-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-    <div class="modal-card bg-surface-container-lowest rounded-xl shadow-2xl p-6 w-full max-w-md border border-surface-container-high relative">
-      <button id="close-update-btn" class="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+  <div class="modal-overlay hidden" id="update-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); padding: 1rem;">
+    <div class="modal-card bg-surface-container-lowest rounded-2xl shadow-2xl p-6 w-full max-w-md border border-surface-container-high relative max-h-[90vh] overflow-y-auto">
+      <button id="close-update-btn" class="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface cursor-pointer" type="button"><span class="material-symbols-outlined">close</span></button>
       <h3 class="text-xl font-headline-md font-bold mb-2">🚀 Update Available</h3>
       <p class="text-sm text-on-surface-variant mb-4">A new version of LogiMate (<span id="current-installed-ver">1.6.0</span> installed) is available on GitHub!</p>
       <div id="update-notes-preview" class="p-3 bg-surface-container-low rounded text-xs text-on-surface-variant mb-4 whitespace-pre-wrap max-h-32 overflow-auto"></div>
       <div class="flex justify-end gap-3">
-        <button id="dismiss-update-btn" class="px-4 py-2 rounded text-on-surface hover:bg-surface-container text-sm">Later</button>
-        <button id="btn-open-update-link" class="px-4 py-2 rounded bg-primary text-on-primary text-sm font-semibold shadow-md hover:bg-primary-container hover:text-on-primary-container">Download Update</button>
+        <button id="dismiss-update-btn" class="px-4 py-2 rounded text-on-surface hover:bg-surface-container text-sm cursor-pointer">Later</button>
+        <button id="btn-open-update-link" class="px-4 py-2 rounded bg-primary text-on-primary text-sm font-semibold shadow-md hover:bg-primary-container hover:text-on-primary-container cursor-pointer">Download Update</button>
       </div>
     </div>
   </div>

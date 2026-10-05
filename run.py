@@ -251,6 +251,7 @@ def main():
             height=850,
             min_size=(960, 640),
             background_color="#080c14",
+            zoomable=True,
         )
         # Starts native GUI loop (blocks until window is closed); readiness check runs in a separate thread
         webview.start(on_gui_started, window)

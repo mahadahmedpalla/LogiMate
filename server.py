@@ -297,6 +297,12 @@ def chat(payload: ChatPayload):
     return result
 
 
+@app.post("/api/chat/reset")
+def reset_chat():
+    agent.conversation_history = []
+    return {"success": True, "message": "Conversation history and context cleared successfully."}
+
+
 @app.post("/api/control/launch-logisim")
 def launch_logisim_app():
     ok = driver.launch_logisim()

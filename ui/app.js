@@ -56,6 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const openSettingsBtn = document.getElementById("open-settings-btn");
   const closeSettingsBtn = document.getElementById("close-settings-btn");
   const cancelSettingsBtn = document.getElementById("cancel-settings-btn");
+  const saveSettingsBtn = document.getElementById("save-settings-btn");
+  const btnResetChat = document.getElementById("btn-reset-chat");
   const settingsForm = document.getElementById("settings-form");
   const cfgProviderSelect = document.getElementById("cfg-provider-select");
   const geminiSettingsGroup = document.getElementById("gemini-settings-group");
@@ -576,7 +578,40 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {}
   }
 
-    function appendUserMessage(text) {
+  function saveMessageToHistory(msg) {
+    try {
+      const saved = sessionStorage.getItem("logimate_chat_history");
+      const list = saved ? JSON.parse(saved) : [];
+      list.push(msg);
+      sessionStorage.setItem("logimate_chat_history", JSON.stringify(list));
+    } catch (e) {
+      console.warn("Could not save message:", e);
+    }
+  }
+
+  function restoreChatHistory() {
+    try {
+      const saved = sessionStorage.getItem("logimate_chat_history");
+      if (!saved) return;
+      const msgs = JSON.parse(saved);
+      if (!Array.isArray(msgs) || msgs.length === 0) return;
+      msgs.forEach((m) => {
+        if (m.type === "user") {
+          appendUserMessage(m.text, false, false);
+        } else if (m.type === "assistant") {
+          appendAssistantMessage(m, false, false);
+        }
+      });
+      // Scroll to bottom of chat feed once restored
+      if (chatFeed && chatFeed.lastElementChild) {
+        chatFeed.lastElementChild.scrollIntoView({ behavior: "auto", block: "end" });
+      }
+    } catch (e) {
+      console.warn("Could not restore chat:", e);
+    }
+  }
+
+  function appendUserMessage(text, save = true, scroll = true) {
     const card = document.createElement("div");
     card.className = "flex items-start justify-end gap-3 pl-8 mb-4";
     card.innerHTML = `
@@ -590,10 +625,11 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-mono text-[10px] font-medium text-on-surface shadow-sm flex-shrink-0">ME</div>
     `;
     chatFeed.appendChild(card);
-    card.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (save) saveMessageToHistory({ type: "user", text });
   }
 
-    function appendPendingMessage() {
+  function appendPendingMessage() {
     const id = "pending-" + Date.now();
     const card = document.createElement("div");
     card.className = "flex items-start gap-3 pr-4 mb-4";
@@ -619,7 +655,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el) el.remove();
   }
 
-    function appendAssistantMessage({ thought, response, actions, isError = false }) {
+  function appendAssistantMessage({ thought, response, actions, isError = false }, save = true, scroll = true) {
     const card = document.createElement("div");
     card.className = "flex items-start gap-3 pr-4 mb-4";
     
@@ -674,7 +710,8 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     chatFeed.appendChild(card);
-    card.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (scroll) card.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (save) saveMessageToHistory({ type: "assistant", thought, response, actions, isError });
   }
 
   // ----------------------------------------------------
@@ -862,8 +899,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  settingsForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  const saveSettingsHandler = async (e) => {
+    if (e) e.preventDefault();
     const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
     const payload = {
       ai_provider: provider,
@@ -898,7 +935,30 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
       alert("Error saving settings: " + e.message);
     }
-  });
+  };
+
+  if (settingsForm) settingsForm.addEventListener("submit", saveSettingsHandler);
+  if (saveSettingsBtn) saveSettingsBtn.addEventListener("click", saveSettingsHandler);
+
+  if (btnResetChat) {
+    btnResetChat.addEventListener("click", async () => {
+      btnResetChat.innerHTML = '<span class="material-symbols-outlined text-[13px] animate-spin">refresh</span><span>Resetting...</span>';
+      try {
+        await fetch("/api/chat/reset", { method: "POST" });
+      } catch (err) {
+        console.warn("Could not reset backend chat context:", err);
+      }
+      chatFeed.innerHTML = "";
+      sessionStorage.removeItem("logimate_chat_history");
+      setTimeout(() => {
+        btnResetChat.innerHTML = '<span class="material-symbols-outlined text-[13px]">restart_alt</span><span>New Chat</span>';
+      }, 350);
+
+      const welcomeCard = document.getElementById("welcome-card");
+      if (welcomeCard) welcomeCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (promptInput) promptInput.focus();
+    });
+  }
 
   // Utilities
   function escapeHtml(str) {
@@ -967,6 +1027,61 @@ document.addEventListener("DOMContentLoaded", () => {
       // Silently ignore if offline
     }
   }
+
+  // ----------------------------------------------------
+  // Universal Zoom Controller (Ctrl +, Ctrl -, Ctrl 0, Ctrl + Wheel)
+  // ----------------------------------------------------
+  let currentZoom = parseFloat(localStorage.getItem("logimate_ui_zoom")) || 1.0;
+  if (currentZoom < 0.5 || currentZoom > 2.0 || isNaN(currentZoom)) currentZoom = 1.0;
+
+  function applyZoom(zoom) {
+    currentZoom = Math.round(zoom * 100) / 100;
+    currentZoom = Math.max(0.5, Math.min(2.0, currentZoom));
+    document.body.style.zoom = currentZoom;
+    try {
+      localStorage.setItem("logimate_ui_zoom", currentZoom.toString());
+    } catch (e) {}
+  }
+
+  // Restore saved zoom if customized
+  if (currentZoom !== 1.0) {
+    applyZoom(currentZoom);
+  }
+
+  // Hotkey listener for Ctrl/Cmd +, -, 0
+  window.addEventListener("keydown", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    if (e.key === "+" || e.key === "=" || e.key === "Add") {
+      e.preventDefault();
+      applyZoom(currentZoom + 0.1);
+    } else if (e.key === "-" || e.key === "_" || e.key === "Subtract") {
+      e.preventDefault();
+      applyZoom(currentZoom - 0.1);
+    } else if (e.key === "0" || e.key === "Numpad0") {
+      e.preventDefault();
+      applyZoom(1.0);
+    }
+  });
+
+  // Mouse wheel listener with Ctrl/Cmd
+  window.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          applyZoom(currentZoom + 0.05);
+        } else if (e.deltaY > 0) {
+          applyZoom(currentZoom - 0.05);
+        }
+      }
+    },
+    { passive: false }
+  );
+
+  // Restore chat messages from session storage
+  restoreChatHistory();
 
   // Check on launch after a brief delay
   setTimeout(checkForUpdates, 1800);
