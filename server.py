@@ -115,10 +115,13 @@ app = FastAPI(title="AI Logisim Controller")
 # Request Models
 class SettingsPayload(BaseModel):
     ai_provider: Optional[str] = None
+    provider: Optional[str] = None
     gemini_api_key: Optional[str] = None
-    gemini_model: Optional[str] = None
     groq_api_key: Optional[str] = None
+    api_key: Optional[str] = None
+    gemini_model: Optional[str] = None
     groq_model: Optional[str] = None
+    model: Optional[str] = None
     custom_model: Optional[str] = None
     logisim_path: Optional[str] = None
     thinking_budget: Optional[int] = None
@@ -263,18 +266,23 @@ def update_settings(payload: SettingsPayload):
 
 
 @app.post("/api/test-key")
+@app.post("/api/test-connection")
 def test_key(payload: SettingsPayload):
-    provider = (payload.ai_provider or config.get("ai_provider", "gemini")).lower()
+    provider = (payload.ai_provider or payload.provider or config.get("ai_provider", "gemini")).lower()
     if provider == "groq":
-        key = payload.groq_api_key.strip() if payload.groq_api_key else config.get("groq_api_key", "")
-        model = payload.groq_model.strip() if payload.groq_model else config.get("groq_model", "qwen/qwen3.8-27b")
+        raw_key = payload.groq_api_key if payload.groq_api_key and payload.groq_api_key.strip() else payload.api_key
+        key = raw_key.strip() if raw_key and raw_key.strip() else config.get("groq_api_key", "")
+        raw_model = payload.groq_model if payload.groq_model and payload.groq_model.strip() else payload.model
+        model = raw_model.strip() if raw_model and raw_model.strip() else config.get("groq_model", "qwen/qwen3.8-27b")
         if model == "custom" and payload.custom_model:
             model = payload.custom_model.strip()
         test_client = GroqClient(api_key=key, model_id=model)
         return test_client.test_connection()
     else:
-        key = payload.gemini_api_key.strip() if payload.gemini_api_key else config.get("gemini_api_key", "")
-        model = payload.gemini_model.strip() if payload.gemini_model else config.get("gemini_model", "gemini-3.6-flash")
+        raw_key = payload.gemini_api_key if payload.gemini_api_key and payload.gemini_api_key.strip() else payload.api_key
+        key = raw_key.strip() if raw_key and raw_key.strip() else config.get("gemini_api_key", "")
+        raw_model = payload.gemini_model if payload.gemini_model and payload.gemini_model.strip() else payload.model
+        model = raw_model.strip() if raw_model and raw_model.strip() else config.get("gemini_model", "gemini-3.6-flash")
         if model == "custom" and payload.custom_model:
             model = payload.custom_model.strip()
         test_client = GeminiClient(api_key=key, model_id=model)

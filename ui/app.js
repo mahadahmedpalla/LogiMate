@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnLaunchLogisim) {
     btnLaunchLogisim.addEventListener("click", async () => {
-      btnLaunchLogisim.textContent = "Starting...";
+      btnLaunchLogisim.innerHTML = '<span class="material-symbols-outlined text-[14px] animate-spin">refresh</span><span>Starting...</span>';
       btnLaunchLogisim.disabled = true;
       try {
         const res = await fetch("/api/control/launch-logisim", { method: "POST" });
@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!d.success) alert(d.message);
       } finally {
         setTimeout(() => {
-          btnLaunchLogisim.textContent = "▶ Launch Logisim";
+          btnLaunchLogisim.innerHTML = '<span class="material-symbols-outlined text-[14px]">play_arrow</span><span>Launch Logisim</span>';
           btnLaunchLogisim.disabled = false;
           updateStatus();
         }, 1500);
@@ -97,12 +97,15 @@ document.addEventListener("DOMContentLoaded", () => {
       // Window status
       if (data.logisim && data.logisim.connected) {
         statusDot.className = "status-dot connected";
-        statusLabel.textContent = `Connected: ${data.logisim.title || "Logisim 2.7.1"}`;
-        statusLabel.title = `Window position: (${data.logisim.rect.left}, ${data.logisim.rect.top})`;
+        const title = data.logisim.title || "Logisim 2.7.1";
+        statusLabel.textContent = `Connected: ${title}`;
+        statusLabel.className = "font-label-mono text-[12px] text-secondary font-semibold truncate";
+        statusLabel.title = `Connected Window: "${title}"\nPosition: (${data.logisim.rect.left}, ${data.logisim.rect.top}) Size: ${data.logisim.rect.width}x${data.logisim.rect.height}`;
         if (btnLaunchLogisim) btnLaunchLogisim.classList.add("hidden");
       } else {
         statusDot.className = "status-dot searching";
         statusLabel.textContent = "Logisim not detected";
+        statusLabel.className = "font-label-mono text-[12px] text-on-surface-variant font-medium truncate";
         statusLabel.title = "Click 'Launch Logisim' or open Logisim 2.7.1 on your desktop";
         if (btnLaunchLogisim) btnLaunchLogisim.classList.remove("hidden");
       }
@@ -187,20 +190,25 @@ document.addEventListener("DOMContentLoaded", () => {
     pinCountBadge.textContent = `${pinNames.length} Pins`;
 
     if (pinNames.length === 0) {
-      pinsGrid.innerHTML = '<div class="empty-pins-notice"><span>Generate a circuit to see interactive pins.</span></div>';
+      pinsGrid.innerHTML = '<div class="p-4 text-center bg-surface-container-low rounded-lg text-on-surface-variant text-[13px]"><span>Generate a circuit to see interactive pins.</span></div>';
       return;
     }
 
     pinNames.forEach((pinName) => {
       const coord = pinMap[pinName];
       const pinEl = document.createElement("div");
-      pinEl.className = "pin-chip";
+            pinEl.className = "flex items-center justify-between p-3.5 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors";
       pinEl.innerHTML = `
-        <div class="pin-header">
-          <span class="pin-title">${escapeHtml(pinName)}</span>
-          <span class="pin-coord">(${coord[0]}, ${coord[1]})</span>
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-label-mono font-bold text-[12px]">
+            ${escapeHtml(pinName.substring(0, 2).toUpperCase())}
+          </div>
+          <div>
+            <div class="font-body-md text-[13px] font-medium text-on-surface">${escapeHtml(pinName)}</div>
+            <div class="font-label-mono text-[10px] text-outline">(${coord[0]}, ${coord[1]})</div>
+          </div>
         </div>
-        <button class="pin-poke-btn" data-pin="${escapeHtml(pinName)}">POKE</button>
+        <button class="pin-poke-btn px-3 py-1.5 rounded bg-surface-container hover:bg-surface-container-high transition-colors text-[11px] font-label-mono font-bold text-on-surface shadow-sm" data-pin="${escapeHtml(pinName)}">POKE</button>
       `;
 
       pinEl.querySelector(".pin-poke-btn").addEventListener("click", async (e) => {
@@ -568,33 +576,41 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {}
   }
 
-  function appendUserMessage(text) {
+    function appendUserMessage(text) {
     const card = document.createElement("div");
-    card.className = "message-card user";
-    card.innerHTML = `<div class="msg-body"><p>${escapeHtml(text)}</p></div>`;
+    card.className = "flex items-start justify-end gap-3 pl-8 mb-4";
+    card.innerHTML = `
+      <div class="rounded-xl rounded-tr-sm bg-primary-container text-on-primary-container p-4 shadow-sm max-w-lg">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-label-mono text-[10px] opacity-80 uppercase">You</span>
+          <span class="text-[9px] opacity-60">• Just now</span>
+        </div>
+        <p class="font-body-md text-[14px]">${escapeHtml(text)}</p>
+      </div>
+      <div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-mono text-[10px] font-medium text-on-surface shadow-sm flex-shrink-0">ME</div>
+    `;
     chatFeed.appendChild(card);
-    chatFeed.scrollTop = chatFeed.scrollHeight;
+    card.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
-  function appendPendingMessage() {
+    function appendPendingMessage() {
     const id = "pending-" + Date.now();
     const card = document.createElement("div");
-    card.className = "message-card assistant";
+    card.className = "flex items-start gap-3 pr-4 mb-4";
     card.id = id;
     card.innerHTML = `
-      <div class="msg-header">
-        <div class="avatar-ring"><span class="avatar-text">AI</span></div>
-        <div class="msg-meta">
-          <span class="sender-name">AI Logisim Controller</span>
-          <span class="msg-timestamp">Synthesizing & Executing...</span>
-        </div>
+      <div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary shadow-sm flex-shrink-0">
+        <span class="material-symbols-outlined text-[18px]">smart_toy</span>
       </div>
-      <div class="msg-body">
-        <p style="color: var(--accent-cyan);">Working with Logisim 2.7.1...</p>
+      <div class="rounded-xl rounded-tl-sm bg-surface-container-lowest p-5 sm:p-6 shadow-sm flex-grow">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant font-label-mono text-[11px] font-medium w-max">
+          <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+          <span>Synthesizing & Executing...</span>
+        </div>
       </div>
     `;
     chatFeed.appendChild(card);
-    chatFeed.scrollTop = chatFeed.scrollHeight;
+    card.scrollIntoView({ behavior: "smooth", block: "end" });
     return id;
   }
 
@@ -603,65 +619,62 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el) el.remove();
   }
 
-  function appendAssistantMessage({ thought, response, actions, isError = false }) {
+    function appendAssistantMessage({ thought, response, actions, isError = false }) {
     const card = document.createElement("div");
-    card.className = "message-card assistant";
-
+    card.className = "flex items-start gap-3 pr-4 mb-4";
+    
     let thoughtHtml = "";
     if (thought) {
       thoughtHtml = `
-        <details class="thought-drawer">
-          <summary>Reasoning Process</summary>
-          <div class="thought-content">${escapeHtml(thought)}</div>
+        <details class="mt-3 border border-surface-container-high rounded p-2 text-[12px] bg-surface-container-low">
+          <summary class="cursor-pointer font-label-mono text-outline font-medium select-none outline-none">Reasoning Process</summary>
+          <div class="mt-2 text-on-surface-variant">${escapeHtml(thought)}</div>
         </details>
       `;
     }
 
     let actionsHtml = "";
     if (actions && actions.length > 0) {
-      const steps = actions
-        .map((a) => {
-          let icon = "✓";
-          let statusClass = "success";
-          if (a.status === "warning") {
-            icon = "!";
-            statusClass = "warning";
-          } else if (a.status === "error") {
-            icon = "✕";
-            statusClass = "error";
-          }
-          return `<div class="timeline-step">
-            <span class="step-icon ${statusClass}">${icon}</span>
-            <span><strong>${escapeHtml(a.action)}:</strong> ${escapeHtml(a.details || a.status)}</span>
-          </div>`;
-        })
-        .join("");
-
+      const steps = actions.map((a) => {
+        const icon = a.status === "error" ? "error" : a.status === "warning" ? "warning" : "check_circle";
+        const color = a.status === "error" ? "text-error" : a.status === "warning" ? "text-amber-500" : "text-secondary";
+        return `
+          <div class="flex items-center gap-2 py-1 border-t border-surface-container-high first:border-0">
+            <span class="material-symbols-outlined text-[14px] ${color}">${icon}</span>
+            <span class="font-body-md text-[13px] text-on-surface-variant">${escapeHtml(a.message)}</span>
+          </div>
+        `;
+      }).join("");
       actionsHtml = `
-        <div class="actions-timeline">
-          <span class="timeline-title">Executed Operations</span>
+        <div class="mt-3 p-3 rounded-lg bg-surface-container-lowest border border-surface-container flex flex-col gap-1">
           ${steps}
         </div>
       `;
     }
 
+    const titleColor = isError ? "bg-error-container text-on-error-container" : "bg-secondary-fixed text-on-secondary-fixed-variant";
+    const titleIcon = isError ? "error" : "check_circle";
+    const titleText = isError ? "Error / Fallback" : "Task Completed";
+
     card.innerHTML = `
-      <div class="msg-header">
-        <div class="avatar-ring"><span class="avatar-text">AI</span></div>
-        <div class="msg-meta">
-          <span class="sender-name">AI Logisim Controller</span>
-          <span class="msg-timestamp">Just now</span>
-        </div>
+      <div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary shadow-sm flex-shrink-0">
+        <span class="material-symbols-outlined text-[18px]">smart_toy</span>
       </div>
-      <div class="msg-body" style="${isError ? "color: var(--accent-crimson);" : ""}">
-        <p>${formatMarkdown(response)}</p>
+      <div class="rounded-xl rounded-tl-sm bg-surface-container-lowest p-5 sm:p-6 shadow-sm flex-grow border ${isError ? 'border-error/30' : 'border-surface-container'}">
+        <div class="flex items-center justify-between pb-2 mb-2">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${titleColor} font-label-mono text-[11px] font-medium">
+            <span class="material-symbols-outlined text-[14px]">${titleIcon}</span>
+            <span>${titleText}</span>
+          </div>
+        </div>
+        <div class="font-body-md text-[14px] text-on-surface leading-relaxed whitespace-pre-wrap">${escapeHtml(response)}</div>
         ${thoughtHtml}
         ${actionsHtml}
       </div>
     `;
 
     chatFeed.appendChild(card);
-    chatFeed.scrollTop = chatFeed.scrollHeight;
+    card.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
   // ----------------------------------------------------
@@ -717,6 +730,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (toggleGroqKeyVis && cfgGroqKey) {
     toggleGroqKeyVis.addEventListener("click", () => {
       cfgGroqKey.type = cfgGroqKey.type === "password" ? "text" : "password";
+      const icon = toggleGroqKeyVis.querySelector(".material-symbols-outlined");
+      if (icon) icon.textContent = cfgGroqKey.type === "password" ? "visibility" : "visibility_off";
     });
   }
 
@@ -790,55 +805,62 @@ document.addEventListener("DOMContentLoaded", () => {
   closeSettingsBtn.addEventListener("click", closeModal);
   cancelSettingsBtn.addEventListener("click", closeModal);
 
-  toggleKeyVis.addEventListener("click", () => {
-    cfgApiKey.type = cfgApiKey.type === "password" ? "text" : "password";
-  });
+  if (toggleKeyVis && cfgApiKey) {
+    toggleKeyVis.addEventListener("click", () => {
+      cfgApiKey.type = cfgApiKey.type === "password" ? "text" : "password";
+      const icon = toggleKeyVis.querySelector(".material-symbols-outlined");
+      if (icon) icon.textContent = cfgApiKey.type === "password" ? "visibility" : "visibility_off";
+    });
+  }
 
-  btnTestConnection.addEventListener("click", async () => {
-    testResultBadge.className = "test-result-badge";
-    testResultBadge.textContent = "Testing...";
-    testResultBadge.classList.remove("hidden");
+  if (btnTestConnection) {
+    btnTestConnection.addEventListener("click", async () => {
+      if (!testResultBadge) return;
+      testResultBadge.className = "px-2.5 py-1 text-[11px] font-semibold rounded-full bg-surface-container-high text-on-surface-variant flex items-center gap-1.5 shadow-xs";
+      testResultBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span><span>Testing API...</span>';
+      testResultBadge.classList.remove("hidden");
 
-    const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
-    const payload = { ai_provider: provider };
+      const provider = cfgProviderSelect ? cfgProviderSelect.value : "gemini";
+      const payload = { ai_provider: provider };
 
-    if (provider === "groq") {
-      payload.groq_api_key = cfgGroqKey.value.trim();
-      let model = cfgGroqModelSelect.value;
-      if (model === "custom") {
-        model = cfgCustomModel.value.trim();
-      }
-      payload.groq_model = model;
-      payload.custom_model = cfgCustomModel.value.trim();
-    } else {
-      payload.gemini_api_key = cfgApiKey.value.trim();
-      let model = cfgModelSelect.value;
-      if (model === "custom") {
-        model = cfgCustomModel.value.trim();
-      }
-      payload.gemini_model = model;
-      payload.custom_model = cfgCustomModel.value.trim();
-    }
-
-    try {
-      const res = await fetch("/api/test-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (data.success) {
-        testResultBadge.className = "test-result-badge success";
-        testResultBadge.textContent = data.message || "Connection Valid!";
+      if (provider === "groq") {
+        payload.groq_api_key = cfgGroqKey.value.trim();
+        let model = cfgGroqModelSelect ? cfgGroqModelSelect.value : "qwen/qwen3.8-27b";
+        if (model === "custom" && cfgCustomModel) {
+          model = cfgCustomModel.value.trim();
+        }
+        payload.groq_model = model;
+        if (cfgCustomModel) payload.custom_model = cfgCustomModel.value.trim();
       } else {
-        testResultBadge.className = "test-result-badge error";
-        testResultBadge.textContent = data.error || "Connection Failed";
+        payload.gemini_api_key = cfgApiKey.value.trim();
+        let model = cfgModelSelect ? cfgModelSelect.value : "gemini-3.6-flash";
+        if (model === "custom" && cfgCustomModel) {
+          model = cfgCustomModel.value.trim();
+        }
+        payload.gemini_model = model;
+        if (cfgCustomModel) payload.custom_model = cfgCustomModel.value.trim();
       }
-    } catch (e) {
-      testResultBadge.className = "test-result-badge error";
-      testResultBadge.textContent = e.message;
-    }
-  });
+
+      try {
+        const res = await fetch("/api/test-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) {
+          testResultBadge.className = "px-2.5 py-1 text-[11px] font-semibold rounded-full bg-secondary-container text-on-secondary-container flex items-center gap-1.5 shadow-xs";
+          testResultBadge.innerHTML = `<span class="material-symbols-outlined text-[14px] text-secondary">check_circle</span><span>${escapeHtml(data.message || "Connection Valid!")}</span>`;
+        } else {
+          testResultBadge.className = "px-2.5 py-1 text-[11px] font-semibold rounded-full bg-error-container text-on-error-container flex items-center gap-1.5 shadow-xs";
+          testResultBadge.innerHTML = `<span class="material-symbols-outlined text-[14px] text-error">error</span><span>${escapeHtml(data.error || "Connection Failed")}</span>`;
+        }
+      } catch (e) {
+        testResultBadge.className = "px-2.5 py-1 text-[11px] font-semibold rounded-full bg-error-container text-on-error-container flex items-center gap-1.5 shadow-xs";
+        testResultBadge.innerHTML = `<span class="material-symbols-outlined text-[14px] text-error">error</span><span>${escapeHtml(e.message)}</span>`;
+      }
+    });
+  }
 
   settingsForm.addEventListener("submit", async (e) => {
     e.preventDefault();

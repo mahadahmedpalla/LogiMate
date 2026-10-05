@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+import json
+
+html_content = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
@@ -11,6 +13,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <style>
     @layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}
+    ::-webkit-scrollbar{display:none;}
     
     /* Preserve some essential overrides from old style.css */
     .hidden { display: none !important; }
@@ -27,125 +30,138 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="bg-surface font-body-md text-on-surface antialiased">
-  <header class="fixed top-0 left-0 right-0 z-50 bg-surface/90 backdrop-blur-xl border-b border-surface-container shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
-    <div class="h-16 w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-      <div class="flex items-center gap-3 sm:gap-4 flex-shrink-0">
-        <div class="flex items-center gap-1.5">
-          <span class="w-3 h-3 rounded-full bg-error/80 inline-block shadow-xs"></span>
-          <span class="w-3 h-3 rounded-full bg-amber-400/90 inline-block shadow-xs"></span>
-          <span class="w-3 h-3 rounded-full bg-secondary-container inline-block shadow-xs"></span>
+  <header class="fixed top-0 left-0 right-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <div class="h-16 w-full px-6 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-5">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-error/70 inline-block"></span>
+          <span class="w-3 h-3 rounded-full bg-amber-400/80 inline-block"></span>
+          <span class="w-3 h-3 rounded-full bg-secondary-container inline-block"></span>
         </div>
-        <div class="flex items-center gap-2 pl-1">
+        <div class="flex items-center gap-2.5 pl-2">
           <div class="w-7 h-7 rounded-xl bg-surface-container flex items-center justify-center text-primary shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <span class="material-symbols-outlined text-[18px]">smart_toy</span>
           </div>
-          <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold">LogiMate</span>
-          <span class="font-label-mono text-[11px] px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-medium">v1.6</span>
+          <span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold">LogiMate v1.6</span>
+        </div>
+        <div id="window-status-badge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-container-low">
+          <span id="status-dot" class="w-2 h-2 rounded-full bg-secondary animate-pulse searching"></span>
+          <span id="status-label" class="font-label-mono text-label-mono text-secondary font-medium tracking-wide">Detecting Logisim 2.7.1...</span>
         </div>
       </div>
       
-      <div id="window-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low border border-surface-container-high/60 shadow-xs max-w-sm sm:max-w-md md:max-w-lg truncate">
-        <span id="status-dot" class="status-dot searching flex-shrink-0"></span>
-        <span id="status-label" class="font-label-mono text-[12px] text-on-surface-variant font-medium truncate" title="Detecting Logisim 2.7.1...">Detecting Logisim 2.7.1...</span>
-        <button id="btn-launch-logisim" class="hidden flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary-container text-on-secondary-container hover:bg-secondary hover:text-on-secondary transition-colors font-body-sm text-[11px] font-bold shadow-xs flex-shrink-0" type="button" title="Launch Logisim 2.7.1">
-          <span class="material-symbols-outlined text-[14px]">play_arrow</span>
-          <span>Launch Logisim</span>
+      <div class="flex items-center gap-3">
+        <button id="btn-launch-logisim" class="hidden flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container-high transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)] group" type="button">
+          <span class="material-symbols-outlined text-secondary text-[17px]">play_arrow</span>
+          <span class="font-body-md text-body-md text-on-surface font-medium">Launch Logisim</span>
         </button>
-        <button id="refresh-status-btn" class="p-1 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors flex items-center justify-center flex-shrink-0" type="button" title="Refresh Logisim Status">
-          <span class="material-symbols-outlined text-[15px]">refresh</span>
-        </button>
-      </div>
-      
-      <div class="flex items-center gap-3 flex-shrink-0">
-        <button id="open-settings-btn" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container border border-surface-container-high/50 transition-colors text-on-surface-variant hover:text-on-surface shadow-xs">
-          <span class="material-symbols-outlined text-[18px]">settings</span>
-          <span id="model-tag-header" class="font-label-mono text-[12px] font-medium text-on-surface">Gemini</span>
-          <span id="api-key-badge" class="api-key-badge">Set Key</span>
+        
+        <button id="open-settings-btn" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-low hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface">
+          <span class="material-symbols-outlined text-[19px]">settings</span>
+          <span id="model-tag-header" class="font-label-mono text-[12px]">Gemini</span>
+          <span id="api-key-badge" class="px-1.5 py-0.5 bg-error/10 text-error rounded text-[10px] uppercase font-bold">Set Key</span>
         </button>
       </div>
     </div>
   </header>
 
-  <main class="w-full pt-20 pb-16 bg-surface min-h-screen">
-    <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+  <main class="w-full pt-16 bg-surface min-h-[calc(100vh-4rem)]">
+    <div class="flex flex-col w-full">
+      <div class="w-full max-w-7xl mx-auto px-6 lg:px-10 py-8 flex flex-col gap-8">
         
-        <!-- LEFT COLUMN: AI Conversation (ChatGPT / Gemini Natural Growth) -->
-        <div class="lg:col-span-7 flex flex-col gap-6">
-          
-          <div id="welcome-card" class="relative overflow-hidden rounded-2xl bg-surface-container-lowest p-6 sm:p-8 shadow-sm border border-surface-container">
-            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-              <div class="relative flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-surface-container-low flex items-center justify-center overflow-hidden shadow-inner">
-                <div class="w-full h-full flex items-center justify-center bg-primary/10">
-                  <span class="material-symbols-outlined text-5xl sm:text-6xl text-primary">smart_toy</span>
-                </div>
-                <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-sm">
-                  <span class="material-symbols-outlined text-[14px]">bolt</span>
-                </div>
-              </div>
-              <div class="flex flex-col text-center sm:text-left flex-grow">
-                <div class="inline-flex items-center self-center sm:self-start gap-1.5 px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-mono text-label-mono mb-2">
-                  <span>CIRCUIT COPILOT</span>
-                </div>
-                <h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">
-                  Hi! What would you like to build today?
-                </h2>
-                <p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-xl">
-                  Tell me in plain English, and I’ll place every gate, connect the wires, and show you how it works step-by-step.
-                </p>
-              </div>
-            </div>
-            
-            <div class="mt-6 pt-5 bg-surface-container-low/60 rounded-xl p-4">
-              <span class="font-label-mono text-label-mono uppercase tracking-wider text-outline block mb-3">Popular Beginner Ideas:</span>
-              <div class="flex flex-wrap gap-2">
-                <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Build a 1-bit Full Adder with inputs A, B, Cin">
-                  <span>💡</span><span>Full Adder</span>
-                </button>
-                <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Create a 2-to-1 Multiplexer">
-                  <span>🔢</span><span>2:1 Mux</span>
-                </button>
-                <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Build an SR Latch using NOR gates">
-                  <span>🚪</span><span>SR Latch</span>
-                </button>
-              </div>
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-2">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-lowest shadow-sm">
+              <span class="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
+              <span class="font-body-sm text-body-sm font-medium text-on-surface">Logisim Desktop Controlled</span>
+              <span class="font-label-mono text-label-mono text-outline">IPC Engine</span>
             </div>
           </div>
-
-          <!-- Chat & Request Thread (Grows naturally down the page) -->
-          <div id="chat-feed" class="flex flex-col gap-4">
-            <!-- Will be populated by app.js -->
-          </div>
-
-          <!-- Clean Floating Prompt Bar -->
-          <div class="sticky bottom-6 z-30 w-full pt-2">
-            <form id="chat-form" class="p-2.5 rounded-2xl bg-surface-container-lowest/95 backdrop-blur-md shadow-xl border border-surface-container-high transition-shadow focus-within:shadow-2xl focus-within:border-primary/40">
-              <div class="flex items-center gap-2">
-                <input id="prompt-input" class="flex-grow bg-transparent px-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none" placeholder="Describe what you want to build in plain English..." type="text" autocomplete="off"/>
-                <button id="send-btn" type="submit" class="px-5 py-2.5 rounded-full bg-primary hover:bg-primary-container hover:text-on-primary-container transition-all text-on-primary font-body-md text-body-md font-medium shadow-sm flex items-center gap-1.5 flex-shrink-0 cursor-pointer">
-                  <span>Build Circuit</span>
-                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
-                </button>
-              </div>
-              <div class="px-3 pt-2 pb-1 flex items-center justify-between text-outline font-label-mono text-[11px]">
-                <span class="flex items-center gap-3">
-                  <label class="flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors">
-                    <input type="checkbox" id="deep-mode-checkbox" class="accent-primary w-3.5 h-3.5">
-                    <span class="font-medium text-primary">Deep Mode (Auto-Repair)</span>
-                  </label>
-                  <span id="active-model-pill" class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant">Gemini</span>
-                </span>
-                <span class="hidden sm:inline-flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[13px]">keyboard_return</span>
-                  <span>Press Return to build automatically</span>
-                </span>
-              </div>
-            </form>
+          <div class="flex items-center gap-2">
+            <button id="refresh-status-btn" class="px-3.5 py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container-high transition-colors font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" type="button">
+              <span class="material-symbols-outlined text-[16px] text-primary">refresh</span>
+              <span>Refresh IPC</span>
+            </button>
           </div>
         </div>
 
-        <!-- RIGHT COLUMN: Visual Circuit & Interactive Controls (Sticky alongside conversation) -->
-        <div class="lg:col-span-5 flex flex-col gap-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1 pb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <!-- LEFT COLUMN: AI Conversation -->
+          <div class="lg:col-span-7 flex flex-col gap-6">
+            
+            <div class="relative overflow-hidden rounded-xl bg-surface-container-lowest p-6 sm:p-8 shadow-sm">
+              <div class="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                <div class="relative flex-shrink-0 w-28 h-28 sm:w-32 sm:h-32 rounded-xl bg-surface-container-low flex items-center justify-center overflow-hidden shadow-inner">
+                  <div class="w-full h-full flex items-center justify-center bg-primary/10">
+                    <span class="material-symbols-outlined text-6xl text-primary">smart_toy</span>
+                  </div>
+                  <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-on-secondary shadow-sm">
+                    <span class="material-symbols-outlined text-[14px]">bolt</span>
+                  </div>
+                </div>
+                <div class="flex flex-col text-center sm:text-left flex-grow">
+                  <div class="inline-flex items-center self-center sm:self-start gap-1.5 px-2.5 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed font-label-mono text-label-mono mb-2">
+                    <span>CIRCUIT COPILOT</span>
+                  </div>
+                  <h2 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">
+                    Hi! What would you like to build today?
+                  </h2>
+                  <p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-xl">
+                    Tell me in plain English, and I’ll place every gate, connect the wires, and show you how it works step-by-step.
+                  </p>
+                </div>
+              </div>
+              
+              <div class="mt-6 pt-5 bg-surface-container-low/60 rounded-xl p-4">
+                <span class="font-label-mono text-label-mono uppercase tracking-wider text-outline block mb-3">Popular Beginner Ideas:</span>
+                <div class="flex flex-wrap gap-2">
+                  <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Build a 1-bit Full Adder with inputs A, B, Cin">
+                    <span>💡</span><span>Full Adder</span>
+                  </button>
+                  <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Create a 2-to-1 Multiplexer">
+                    <span>🔢</span><span>2:1 Mux</span>
+                  </button>
+                  <button class="prompt-chip group px-3 py-1.5 rounded-full bg-surface-container-lowest hover:bg-primary-container hover:text-on-primary-container transition-all font-body-sm text-body-sm font-medium text-on-surface shadow-sm flex items-center gap-1.5" data-prompt="Build an SR Latch using NOR gates">
+                    <span>🚪</span><span>SR Latch</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat & Request Thread -->
+            <div id="chat-feed" class="flex flex-col gap-4">
+              <!-- Will be populated by app.js -->
+            </div>
+
+            <!-- Clean Floating Prompt Bar -->
+            <div class="sticky bottom-6 z-20 w-full mt-2">
+              <form id="chat-form" class="p-2 rounded-xl bg-surface-container-lowest shadow-xl border border-surface-container-high">
+                <div class="flex items-center gap-2">
+                  <input id="prompt-input" class="flex-grow bg-transparent px-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none" placeholder="Describe what you want to build in plain English..." type="text"/>
+                  <button id="send-btn" type="submit" class="px-4 py-2 rounded-full bg-primary-container hover:bg-primary transition-all text-on-primary font-body-md text-body-md font-medium shadow-sm flex items-center gap-1.5 flex-shrink-0">
+                    <span>Build Circuit</span>
+                    <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </button>
+                </div>
+                <div class="px-3 pt-2 pb-1 flex items-center justify-between text-outline font-label-mono text-[11px]">
+                  <span class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors">
+                      <input type="checkbox" id="deep-mode-checkbox" class="accent-primary w-3 h-3">
+                      <span class="font-medium text-primary">Deep Mode (Auto-Repair)</span>
+                    </label>
+                    <span id="active-model-pill" class="bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant">Gemini</span>
+                  </span>
+                  <span class="hidden sm:inline flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[13px]">keyboard_return</span>
+                    <span>Press Return to build automatically</span>
+                  </span>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: Visual Circuit & Interactive Controls -->
+          <div class="lg:col-span-5 flex flex-col gap-6">
             
             <div id="schematic-card" class="rounded-xl bg-surface-container-lowest p-5 sm:p-6 shadow-sm border border-surface-container-high">
               <div class="flex items-center justify-between pb-4">
@@ -154,7 +170,7 @@
                   <span class="font-headline-sm text-headline-sm text-on-surface">Live Circuit Canvas</span>
                 </div>
                 <div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-container text-secondary font-label-mono text-label-mono">
-                  <span id="circuit-presence-pill" class="status-pill-small">No Circuit</span>
+                  <span id="circuit-presence-pill" class="font-semibold text-[10px] tracking-wider uppercase">No Circuit</span>
                 </div>
               </div>
               
@@ -231,17 +247,21 @@
                 </div>
                 <img id="live-screenshot-img" class="hidden absolute inset-0 w-full h-full object-cover" alt="Logisim window crop">
               </div>
+              <div class="flex justify-between items-center">
+                 <span id="test-result-badge" class="hidden px-2 py-1 text-[10px] font-bold rounded uppercase"></span>
+              </div>
             </div>
 
           </div>
         </div>
       </div>
+    </div>
   </main>
 
-  <!-- Modals -->
+  <!-- Modals will be appended below (keeping original modal HTML for now) -->
   <div class="modal-overlay hidden" id="settings-modal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
     <div class="modal-card bg-surface-container-lowest rounded-xl shadow-2xl p-6 w-full max-w-lg border border-surface-container-high relative">
-      <button id="close-settings-btn" class="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface cursor-pointer" type="button"><span class="material-symbols-outlined">close</span></button>
+      <button id="close-settings-btn" class="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
       <h2 class="text-xl font-headline-md font-bold mb-4">Settings & AI Credentials</h2>
       <form id="settings-form" class="flex flex-col gap-4">
         <div class="flex flex-col gap-1">
@@ -254,12 +274,7 @@
         <div id="gemini-settings-group" class="flex flex-col gap-4">
           <div class="flex flex-col gap-1">
             <label class="text-sm font-semibold">Gemini API Key</label>
-            <div class="flex gap-2">
-              <input type="password" id="cfg-api-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="AIza...">
-              <button type="button" id="toggle-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
-                <span class="material-symbols-outlined text-[18px]">visibility</span>
-              </button>
-            </div>
+            <input type="password" id="cfg-api-key" class="p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="AIza...">
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-sm font-semibold">Gemini Model</label>
@@ -283,12 +298,7 @@
         <div id="groq-settings-group" class="flex flex-col gap-4 hidden">
           <div class="flex flex-col gap-1">
             <label class="text-sm font-semibold">Groq API Key</label>
-            <div class="flex gap-2">
-              <input type="password" id="cfg-groq-key" class="flex-grow p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="gsk_...">
-              <button type="button" id="toggle-groq-key-vis" class="px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="Toggle visibility">
-                <span class="material-symbols-outlined text-[18px]">visibility</span>
-              </button>
-            </div>
+            <input type="password" id="cfg-groq-key" class="p-2 rounded border border-surface-container-high bg-surface-container-low" placeholder="gsk_...">
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-sm font-semibold">Groq Model</label>
@@ -305,16 +315,7 @@
           <input type="text" id="cfg-custom-model" class="p-2 rounded border border-surface-container-high bg-surface-container-low">
         </div>
 
-        <div class="flex items-center gap-3 mt-2">
-          <button type="button" id="btn-test-connection" class="px-4 py-2 rounded-lg text-on-surface bg-surface-container hover:bg-surface-container-high border border-surface-container-high text-sm font-medium transition-colors flex items-center gap-1.5 cursor-pointer">
-            <span class="material-symbols-outlined text-[16px] text-primary">network_check</span>
-            <span>Test API Connection</span>
-          </button>
-          <span id="test-result-badge" class="hidden px-2.5 py-1 text-[11px] font-semibold rounded-full uppercase"></span>
-        </div>
-
         <hr class="border-surface-container-high">
-
         
         <div class="flex flex-col gap-1">
           <label class="text-sm font-semibold">Logisim Path</label>
@@ -356,3 +357,9 @@
   <script src="/static/app.js"></script>
 </body>
 </html>
+"""
+
+with open("f:/original final downloads/logism ai control/ui/index.html", "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print("index.html rewritten successfully!")
