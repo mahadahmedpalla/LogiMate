@@ -34,7 +34,7 @@ This will start the local server and automatically open the dashboard in your de
 
 ## 📦 Download & Install (For End Users)
 
-1. Download the latest setup installer (`LogiMate-Setup-v1.6.0.exe`) from the [Releases Page](https://github.com/mahadahmedpalla/LogiMate/releases/latest).
+1. Download the latest setup installer (`LogiMate-Setup-v1.7.0.exe`) from the [Releases Page](https://github.com/mahadahmedpalla/LogiMate/releases/latest).
 2. Double-click the installer to install LogiMate with desktop shortcuts and automatic Logisim detection.
 
 ### 🛡️ Note on Windows SmartScreen ("Windows protected your PC")
@@ -62,7 +62,7 @@ python build_exe.py
 # 2. Compile single-file Windows setup installer:
 python build_installer.py
 ```
-The compiled setup wizard will be created in `dist_installer/LogiMate-Setup-v1.6.0.exe`.
+The compiled setup wizard will be created in `dist_installer/LogiMate-Setup-v1.7.0.exe`.
 
 ---
 
